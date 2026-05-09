@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/bibashjaprel/udharo-pro-api/internal/auth"
 	"github.com/bibashjaprel/udharo-pro-api/internal/config"
 	"github.com/bibashjaprel/udharo-pro-api/internal/database"
 )
@@ -18,6 +19,7 @@ func main() {
 	defer db.Close()
 
 	mux := http.NewServeMux()
+	authHandler := auth.NewHandler(auth.NewService(db))
 
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		if err := db.Ping(r.Context()); err != nil {
@@ -31,6 +33,7 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"status":"ok","service":"udharo-pro-api","database":"up"}`))
 	})
+	mux.HandleFunc("/api/v1/auth/signup", authHandler.Signup)
 
 	addr := ":" + cfg.AppPort
 	log.Printf("Udharo Pro API running on %s", addr)
