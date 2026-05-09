@@ -1,0 +1,2 @@
+-- Baseline migration for Udharo Pro API.
+-- Add schema changes in future migrations.
