@@ -6,7 +6,7 @@ This project uses [golang-migrate](https://github.com/golang-migrate/migrate) fo
 PostgreSQL database migrations. Migration files live in the `migrations`
 directory.
 
-Set `DATABASE_URL` before running migration commands:
+Set `DATABASE_URL` in `.env` or export it before running migration commands:
 
 ```sh
 export DATABASE_URL="postgres://user:password@localhost:5432/udharo_pro?sslmode=disable"
