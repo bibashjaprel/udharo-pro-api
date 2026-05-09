@@ -23,6 +23,10 @@ func (s *fakeSignupService) Signup(_ context.Context, req SignupRequest) (Signup
 	return s.response, s.err
 }
 
+func (s *fakeSignupService) Login(_ context.Context, _ LoginRequest) (LoginResponse, error) {
+	return LoginResponse{}, nil
+}
+
 func TestSignupHandlerCreatesSignup(t *testing.T) {
 	service := &fakeSignupService{
 		response: SignupResponse{

@@ -39,11 +39,15 @@ type SignupResponse struct {
 }
 
 type Service struct {
-	db *pgxpool.Pool
+	db        *pgxpool.Pool
+	jwtSecret string
 }
 
-func NewService(db *pgxpool.Pool) *Service {
-	return &Service{db: db}
+func NewService(db *pgxpool.Pool, jwtSecret string) *Service {
+	return &Service{
+		db:        db,
+		jwtSecret: jwtSecret,
+	}
 }
 
 func (s *Service) Signup(ctx context.Context, req SignupRequest) (SignupResponse, error) {
@@ -152,6 +156,7 @@ func mapSignupDBError(err error) error {
 
 type SignupService interface {
 	Signup(ctx context.Context, req SignupRequest) (SignupResponse, error)
+	Login(ctx context.Context, req LoginRequest) (LoginResponse, error)
 }
 
 type Handler struct {

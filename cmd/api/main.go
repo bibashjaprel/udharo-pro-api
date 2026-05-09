@@ -19,7 +19,7 @@ func main() {
 	defer db.Close()
 
 	mux := http.NewServeMux()
-	authHandler := auth.NewHandler(auth.NewService(db))
+	authHandler := auth.NewHandler(auth.NewService(db, cfg.JWTSecret))
 
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		if err := db.Ping(r.Context()); err != nil {
@@ -34,6 +34,7 @@ func main() {
 		_, _ = w.Write([]byte(`{"status":"ok","service":"udharo-pro-api","database":"up"}`))
 	})
 	mux.HandleFunc("/api/v1/auth/signup", authHandler.Signup)
+	mux.HandleFunc("/api/v1/auth/login", authHandler.Login)
 
 	addr := ":" + cfg.AppPort
 	log.Printf("Udharo Pro API running on %s", addr)
