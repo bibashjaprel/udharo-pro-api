@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -9,8 +10,17 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
+type fakeSessionValidator struct {
+	active bool
+	err    error
+}
+
+func (v fakeSessionValidator) IsSessionActive(_ context.Context, _ string, _ int64, _ int64) (bool, error) {
+	return v.active, v.err
+}
+
 func TestAuthMiddlewareRejectsMissingToken(t *testing.T) {
-	handler := AuthMiddleware("secret")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := AuthMiddleware("secret", fakeSessionValidator{active: true})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Fatal("next handler should not be called")
 	}))
 
@@ -25,7 +35,7 @@ func TestAuthMiddlewareRejectsMissingToken(t *testing.T) {
 }
 
 func TestAuthMiddlewareRejectsInvalidToken(t *testing.T) {
-	handler := AuthMiddleware("secret")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := AuthMiddleware("secret", fakeSessionValidator{active: true})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Fatal("next handler should not be called")
 	}))
 
@@ -41,7 +51,7 @@ func TestAuthMiddlewareRejectsInvalidToken(t *testing.T) {
 }
 
 func TestAuthMiddlewareRejectsExpiredToken(t *testing.T) {
-	handler := AuthMiddleware("secret")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := AuthMiddleware("secret", fakeSessionValidator{active: true})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Fatal("next handler should not be called")
 	}))
 	token := testAccessToken(t, "secret", 1, 2, time.Now().UTC().Add(-time.Hour))
@@ -58,7 +68,7 @@ func TestAuthMiddlewareRejectsExpiredToken(t *testing.T) {
 }
 
 func TestAuthMiddlewareAddsUserAndShopToContext(t *testing.T) {
-	handler := AuthMiddleware("secret")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := AuthMiddleware("secret", fakeSessionValidator{active: true})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := UserIDFromContext(r.Context())
 		if !ok || userID != 1 {
 			t.Fatalf("expected user_id 1 in context, got %d, %v", userID, ok)
@@ -72,6 +82,11 @@ func TestAuthMiddlewareAddsUserAndShopToContext(t *testing.T) {
 		role, ok := RoleFromContext(r.Context())
 		if !ok || role != "owner" {
 			t.Fatalf("expected role owner in context, got %q, %v", role, ok)
+		}
+
+		tokenID, ok := TokenIDFromContext(r.Context())
+		if !ok || tokenID != "test-token-id" {
+			t.Fatalf("expected token id in context, got %q, %v", tokenID, ok)
 		}
 
 		w.WriteHeader(http.StatusNoContent)
@@ -90,10 +105,27 @@ func TestAuthMiddlewareAddsUserAndShopToContext(t *testing.T) {
 }
 
 func TestAuthMiddlewareRejectsWrongSecret(t *testing.T) {
-	handler := AuthMiddleware("secret")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := AuthMiddleware("secret", fakeSessionValidator{active: true})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Fatal("next handler should not be called")
 	}))
 	token := testAccessToken(t, "other-secret", 1, 2, time.Now().UTC().Add(time.Hour))
+
+	req := httptest.NewRequest(http.MethodGet, "/private", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected status %d, got %d", http.StatusUnauthorized, rec.Code)
+	}
+}
+
+func TestAuthMiddlewareRejectsRevokedSession(t *testing.T) {
+	handler := AuthMiddleware("secret", fakeSessionValidator{active: false})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("next handler should not be called")
+	}))
+	token := testAccessToken(t, "secret", 1, 2, time.Now().UTC().Add(time.Hour))
 
 	req := httptest.NewRequest(http.MethodGet, "/private", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
