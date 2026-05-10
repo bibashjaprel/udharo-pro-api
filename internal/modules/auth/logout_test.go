@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/bibashjaprel/udharo-pro-api/internal/shared/contextx"
 )
 
 type fakeLogoutService struct {
@@ -37,9 +39,9 @@ func TestLogoutHandlerRevokesCurrentSession(t *testing.T) {
 	service := &fakeLogoutService{}
 	handler := NewHandler(service)
 
-	ctx := context.WithValue(context.Background(), tokenIDContextKey, "token-id")
-	ctx = context.WithValue(ctx, userIDContextKey, int64(1))
-	ctx = context.WithValue(ctx, shopIDContextKey, int64(2))
+	ctx := contextx.WithTokenID(context.Background(), "token-id")
+	ctx = contextx.WithUserID(ctx, "1")
+	ctx = contextx.WithShopID(ctx, "2")
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil).WithContext(ctx)
 	rec := httptest.NewRecorder()
@@ -56,11 +58,14 @@ func TestLogoutHandlerRevokesCurrentSession(t *testing.T) {
 		t.Fatalf("unexpected logout args: token=%q user=%d shop=%d", service.tokenID, service.userID, service.shopID)
 	}
 
-	var response LogoutResponse
+	var response struct {
+		Success bool           `json:"success"`
+		Data    LogoutResponse `json:"data"`
+	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if response.Message == "" {
+	if !response.Success || response.Data.Message == "" {
 		t.Fatal("expected success message")
 	}
 }
@@ -81,9 +86,9 @@ func TestLogoutHandlerRejectsMissingSession(t *testing.T) {
 	service := &fakeLogoutService{err: ErrSessionNotFound}
 	handler := NewHandler(service)
 
-	ctx := context.WithValue(context.Background(), tokenIDContextKey, "token-id")
-	ctx = context.WithValue(ctx, userIDContextKey, int64(1))
-	ctx = context.WithValue(ctx, shopIDContextKey, int64(2))
+	ctx := contextx.WithTokenID(context.Background(), "token-id")
+	ctx = contextx.WithUserID(ctx, "1")
+	ctx = contextx.WithShopID(ctx, "2")
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil).WithContext(ctx)
 	rec := httptest.NewRecorder()
@@ -99,9 +104,9 @@ func TestLogoutHandlerReturnsServerError(t *testing.T) {
 	service := &fakeLogoutService{err: errors.New("database unavailable")}
 	handler := NewHandler(service)
 
-	ctx := context.WithValue(context.Background(), tokenIDContextKey, "token-id")
-	ctx = context.WithValue(ctx, userIDContextKey, int64(1))
-	ctx = context.WithValue(ctx, shopIDContextKey, int64(2))
+	ctx := contextx.WithTokenID(context.Background(), "token-id")
+	ctx = contextx.WithUserID(ctx, "1")
+	ctx = contextx.WithShopID(ctx, "2")
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil).WithContext(ctx)
 	rec := httptest.NewRecorder()

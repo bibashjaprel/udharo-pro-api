@@ -72,11 +72,17 @@ func TestLoginHandlerLogsInUser(t *testing.T) {
 		t.Fatalf("expected identifier to be passed to service, got %q", service.request.Identifier)
 	}
 
-	var response LoginResponse
+	var response struct {
+		Success bool          `json:"success"`
+		Data    LoginResponse `json:"data"`
+	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if response.AccessToken == "" || response.User.ID != 1 || response.Shop.ID != 2 || response.Shop.Role != "owner" {
+	if !response.Success {
+		t.Fatal("expected success response")
+	}
+	if response.Data.AccessToken == "" || response.Data.User.ID != 1 || response.Data.Shop.ID != 2 || response.Data.Shop.Role != "owner" {
 		t.Fatalf("unexpected response: %+v", response)
 	}
 }

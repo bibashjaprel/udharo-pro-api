@@ -64,11 +64,17 @@ func TestSignupHandlerCreatesSignup(t *testing.T) {
 		t.Fatalf("expected request email to be passed to service, got %q", service.request.Email)
 	}
 
-	var response SignupResponse
+	var response struct {
+		Success bool           `json:"success"`
+		Data    SignupResponse `json:"data"`
+	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if response.Role != "owner" || response.UserID != 1 || response.ShopID != 2 || response.SubscriptionID != 3 {
+	if !response.Success {
+		t.Fatal("expected success response")
+	}
+	if response.Data.Role != "owner" || response.Data.UserID != 1 || response.Data.ShopID != 2 || response.Data.SubscriptionID != 3 {
 		t.Fatalf("unexpected response: %+v", response)
 	}
 }
