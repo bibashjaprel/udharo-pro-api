@@ -9,3 +9,11 @@ type CurrentShopResponse struct {
 	LogoURL      *string `json:"logo_url"`
 	Status       string  `json:"status"`
 }
+
+type UpdateShopRequest struct {
+	Name         *string `json:"name"`
+	Phone        *string `json:"phone"`
+	Address      *string `json:"address"`
+	BusinessType *string `json:"business_type"`
+	LogoURL      *string `json:"logo_url"`
+}
