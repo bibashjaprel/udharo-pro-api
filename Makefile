@@ -7,7 +7,7 @@ include .env
 export
 endif
 
-.PHONY: migrate-up migrate-down migrate-force migrate-create
+.PHONY: migrate-up migrate-down migrate-force migrate-create docker-build docker-up docker-down docker-logs
 
 migrate-up:
 	@test -n "$(DATABASE_URL)" || (echo "DATABASE_URL is required" && exit 1)
@@ -25,3 +25,15 @@ migrate-force:
 migrate-create:
 	@test -n "$(NAME)" || (echo "NAME is required" && exit 1)
 	$(MIGRATE) create -ext sql -dir $(MIGRATIONS_DIR) -seq $(NAME)
+
+docker-build:
+	docker compose --env-file .env.production build
+
+docker-up:
+	docker compose --env-file .env.production up -d --build
+
+docker-down:
+	docker compose --env-file .env.production down
+
+docker-logs:
+	docker compose --env-file .env.production logs -f api
