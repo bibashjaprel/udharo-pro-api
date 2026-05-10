@@ -1,6 +1,7 @@
 package shop
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -15,12 +16,24 @@ type fakeCurrentShopService struct {
 	response CurrentShopResponse
 	err      error
 	shopID   int64
+	userID   int64
+	role     string
+	request  UpdateShopRequest
 	called   bool
 }
 
 func (s *fakeCurrentShopService) CurrentShop(_ context.Context, shopID int64) (CurrentShopResponse, error) {
 	s.called = true
 	s.shopID = shopID
+	return s.response, s.err
+}
+
+func (s *fakeCurrentShopService) UpdateShop(_ context.Context, userID int64, shopID int64, role string, req UpdateShopRequest) (CurrentShopResponse, error) {
+	s.called = true
+	s.userID = userID
+	s.shopID = shopID
+	s.role = role
+	s.request = req
 	return s.response, s.err
 }
 
@@ -130,5 +143,117 @@ func TestCurrentShopHandlerReturnsServerError(t *testing.T) {
 
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("expected status %d, got %d", http.StatusInternalServerError, rec.Code)
+	}
+}
+
+func TestUpdateShopHandlerUpdatesCurrentShop(t *testing.T) {
+	phone := "9841000000"
+	service := &fakeCurrentShopService{
+		response: CurrentShopResponse{
+			ID:     2,
+			Name:   "Updated Shop",
+			Phone:  &phone,
+			Status: "active",
+		},
+	}
+	handler := NewHandler(service)
+
+	ctx := contextx.WithUserID(context.Background(), "1")
+	ctx = contextx.WithShopID(ctx, "2")
+	ctx = contextx.WithRole(ctx, "owner")
+
+	body := []byte(`{"name":"Updated Shop","phone":"9841000000"}`)
+	req := httptest.NewRequest(http.MethodPatch, CurrentShopPath, bytes.NewReader(body)).WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	handler.UpdateShop(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+	if !service.called {
+		t.Fatal("expected update shop service to be called")
+	}
+	if service.userID != 1 || service.shopID != 2 || service.role != "owner" {
+		t.Fatalf("unexpected update args: user=%d shop=%d role=%q", service.userID, service.shopID, service.role)
+	}
+	if service.request.Name == nil || *service.request.Name != "Updated Shop" {
+		t.Fatalf("expected name to be passed to service, got %+v", service.request.Name)
+	}
+
+	var response struct {
+		Success bool                `json:"success"`
+		Data    CurrentShopResponse `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !response.Success || response.Data.Name != "Updated Shop" {
+		t.Fatalf("unexpected response: %+v", response)
+	}
+}
+
+func TestUpdateShopHandlerRequiresAuthentication(t *testing.T) {
+	handler := NewHandler(&fakeCurrentShopService{})
+	req := httptest.NewRequest(http.MethodPatch, CurrentShopPath, bytes.NewReader([]byte(`{"name":"Updated Shop"}`)))
+	rec := httptest.NewRecorder()
+
+	handler.UpdateShop(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected status %d, got %d", http.StatusUnauthorized, rec.Code)
+	}
+}
+
+func TestUpdateShopHandlerRejectsInvalidFields(t *testing.T) {
+	handler := NewHandler(&fakeCurrentShopService{})
+
+	ctx := contextx.WithUserID(context.Background(), "1")
+	ctx = contextx.WithShopID(ctx, "2")
+	ctx = contextx.WithRole(ctx, "owner")
+
+	req := httptest.NewRequest(http.MethodPatch, CurrentShopPath, bytes.NewReader([]byte(`{"unknown":"value"}`))).WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	handler.UpdateShop(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, rec.Code)
+	}
+}
+
+func TestUpdateShopHandlerRequiresOwner(t *testing.T) {
+	service := &fakeCurrentShopService{err: ErrShopUpdateForbidden}
+	handler := NewHandler(service)
+
+	ctx := contextx.WithUserID(context.Background(), "1")
+	ctx = contextx.WithShopID(ctx, "2")
+	ctx = contextx.WithRole(ctx, "staff")
+
+	req := httptest.NewRequest(http.MethodPatch, CurrentShopPath, bytes.NewReader([]byte(`{"name":"Updated Shop"}`))).WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	handler.UpdateShop(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected status %d, got %d", http.StatusForbidden, rec.Code)
+	}
+}
+
+func TestUpdateShopHandlerRejectsInvalidProfile(t *testing.T) {
+	service := &fakeCurrentShopService{err: ErrInvalidShopProfile}
+	handler := NewHandler(service)
+
+	ctx := contextx.WithUserID(context.Background(), "1")
+	ctx = contextx.WithShopID(ctx, "2")
+	ctx = contextx.WithRole(ctx, "owner")
+
+	req := httptest.NewRequest(http.MethodPatch, CurrentShopPath, bytes.NewReader([]byte(`{"name":" "}`))).WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	handler.UpdateShop(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, rec.Code)
 	}
 }
