@@ -3,21 +3,29 @@ package auth
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type contextKey string
 
 const (
-	userIDContextKey contextKey = "user_id"
-	shopIDContextKey contextKey = "shop_id"
-	roleContextKey   contextKey = "role"
+	userIDContextKey  contextKey = "user_id"
+	shopIDContextKey  contextKey = "shop_id"
+	roleContextKey    contextKey = "role"
+	tokenIDContextKey contextKey = "token_id"
 )
 
-func AuthMiddleware(jwtSecret string) func(http.Handler) http.Handler {
+type SessionValidator interface {
+	IsSessionActive(ctx context.Context, tokenID string, userID int64, shopID int64) (bool, error)
+}
+
+func AuthMiddleware(jwtSecret string, sessionValidator SessionValidator) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			tokenString, err := bearerToken(r.Header.Get("Authorization"))
@@ -32,9 +40,16 @@ func AuthMiddleware(jwtSecret string) func(http.Handler) http.Handler {
 				return
 			}
 
+			active, err := sessionValidator.IsSessionActive(r.Context(), claims.ID, claims.UserID, claims.ShopID)
+			if err != nil || !active {
+				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+				return
+			}
+
 			ctx := context.WithValue(r.Context(), userIDContextKey, claims.UserID)
 			ctx = context.WithValue(ctx, shopIDContextKey, claims.ShopID)
 			ctx = context.WithValue(ctx, roleContextKey, claims.Role)
+			ctx = context.WithValue(ctx, tokenIDContextKey, claims.ID)
 
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
@@ -54,6 +69,39 @@ func ShopIDFromContext(ctx context.Context) (int64, bool) {
 func RoleFromContext(ctx context.Context) (string, bool) {
 	role, ok := ctx.Value(roleContextKey).(string)
 	return role, ok
+}
+
+func TokenIDFromContext(ctx context.Context) (string, bool) {
+	tokenID, ok := ctx.Value(tokenIDContextKey).(string)
+	return tokenID, ok
+}
+
+type SessionStore struct {
+	db *pgxpool.Pool
+}
+
+func NewSessionStore(db *pgxpool.Pool) *SessionStore {
+	return &SessionStore{db: db}
+}
+
+func (s *SessionStore) IsSessionActive(ctx context.Context, tokenID string, userID int64, shopID int64) (bool, error) {
+	var active bool
+	err := s.db.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1
+			FROM user_sessions
+			WHERE token_id = $1
+				AND user_id = $2
+				AND shop_id = $3
+				AND revoked_at IS NULL
+				AND expires_at > $4
+		)
+	`, tokenID, userID, shopID, time.Now().UTC()).Scan(&active)
+	if err != nil {
+		return false, fmt.Errorf("check active session: %w", err)
+	}
+
+	return active, nil
 }
 
 func bearerToken(header string) (string, error) {
@@ -82,7 +130,7 @@ func parseAccessToken(tokenString string, jwtSecret string) (*accessTokenClaims,
 	if err != nil {
 		return nil, err
 	}
-	if !token.Valid || claims.UserID == 0 || claims.ShopID == 0 {
+	if !token.Valid || claims.ID == "" || claims.UserID == 0 || claims.ShopID == 0 {
 		return nil, errors.New("invalid token")
 	}
 

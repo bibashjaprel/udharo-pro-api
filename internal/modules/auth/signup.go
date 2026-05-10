@@ -157,6 +157,7 @@ func mapSignupDBError(err error) error {
 type SignupService interface {
 	Signup(ctx context.Context, req SignupRequest) (SignupResponse, error)
 	Login(ctx context.Context, req LoginRequest) (LoginResponse, error)
+	Logout(ctx context.Context, tokenID string, userID int64, shopID int64) error
 }
 
 type Handler struct {

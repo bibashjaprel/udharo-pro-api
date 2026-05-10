@@ -28,6 +28,10 @@ func (s *fakeLoginService) Login(_ context.Context, req LoginRequest) (LoginResp
 	return s.response, s.err
 }
 
+func (s *fakeLoginService) Logout(_ context.Context, _ string, _ int64, _ int64) error {
+	return nil
+}
+
 func TestLoginHandlerLogsInUser(t *testing.T) {
 	expiresAt := time.Now().UTC().Add(time.Hour)
 	service := &fakeLoginService{

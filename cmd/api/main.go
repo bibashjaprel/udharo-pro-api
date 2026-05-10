@@ -4,9 +4,9 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/bibashjaprel/udharo-pro-api/internal/auth"
 	"github.com/bibashjaprel/udharo-pro-api/internal/config"
 	"github.com/bibashjaprel/udharo-pro-api/internal/database"
+	"github.com/bibashjaprel/udharo-pro-api/internal/modules/auth"
 )
 
 func main() {
@@ -19,7 +19,9 @@ func main() {
 	defer db.Close()
 
 	mux := http.NewServeMux()
-	authHandler := auth.NewHandler(auth.NewService(db, cfg.JWTSecret))
+	authService := auth.NewService(db, cfg.JWTSecret)
+	authHandler := auth.NewHandler(authService)
+	authMiddleware := auth.AuthMiddleware(cfg.JWTSecret, auth.NewSessionStore(db))
 
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		if err := db.Ping(r.Context()); err != nil {
@@ -35,6 +37,7 @@ func main() {
 	})
 	mux.HandleFunc("/api/v1/auth/signup", authHandler.Signup)
 	mux.HandleFunc("/api/v1/auth/login", authHandler.Login)
+	mux.Handle("/api/v1/auth/logout", authMiddleware(http.HandlerFunc(authHandler.Logout)))
 
 	addr := ":" + cfg.AppPort
 	log.Printf("Udharo Pro API running on %s", addr)
