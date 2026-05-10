@@ -3,6 +3,7 @@ package server
 import (
 	"net/http"
 
+	"github.com/bibashjaprel/udharo-pro-api/internal/middleware"
 	"github.com/bibashjaprel/udharo-pro-api/internal/modules/auth"
 	"github.com/bibashjaprel/udharo-pro-api/internal/shared/response"
 )
@@ -11,7 +12,14 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/health", s.health)
 
 	authHandler, authMiddleware := s.authModule()
-	auth.RegisterRoutes(s.mux, authHandler, authMiddleware)
+	auth.RegisterPublicRoutes(s.mux, authHandler)
+	s.registerProtectedRoutes(auth.ProtectedRoutes(authHandler), authMiddleware)
+}
+
+func (s *Server) registerProtectedRoutes(routes map[string]http.Handler, middlewares ...middleware.Middleware) {
+	for path, handler := range routes {
+		s.mux.Handle(path, middleware.Chain(handler, middlewares...))
+	}
 }
 
 func (s *Server) health(w http.ResponseWriter, r *http.Request) {

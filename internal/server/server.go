@@ -41,7 +41,7 @@ func (s *Server) HTTPServer() *http.Server {
 	}
 }
 
-func (s *Server) authModule() (*auth.Handler, middleware.Authenticator) {
+func (s *Server) authModule() (*auth.Handler, middleware.Middleware) {
 	authService := auth.NewService(s.db, s.config.JWTSecret)
 	authHandler := auth.NewHandler(authService)
 	authMiddleware := middleware.Auth(s.config.JWTSecret, authService)

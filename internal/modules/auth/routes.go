@@ -4,10 +4,19 @@ import (
 	"net/http"
 )
 
-type Middleware = func(http.Handler) http.Handler
+const (
+	SignupPath = "/api/v1/auth/signup"
+	LoginPath  = "/api/v1/auth/login"
+	LogoutPath = "/api/v1/auth/logout"
+)
 
-func RegisterRoutes(mux *http.ServeMux, handler *Handler, authMiddleware Middleware) {
-	mux.HandleFunc("/api/v1/auth/signup", handler.Signup)
-	mux.HandleFunc("/api/v1/auth/login", handler.Login)
-	mux.Handle("/api/v1/auth/logout", authMiddleware(http.HandlerFunc(handler.Logout)))
+func RegisterPublicRoutes(mux *http.ServeMux, handler *Handler) {
+	mux.HandleFunc(SignupPath, handler.Signup)
+	mux.HandleFunc(LoginPath, handler.Login)
+}
+
+func ProtectedRoutes(handler *Handler) map[string]http.Handler {
+	return map[string]http.Handler{
+		LogoutPath: http.HandlerFunc(handler.Logout),
+	}
 }

@@ -12,13 +12,11 @@ import (
 	"github.com/bibashjaprel/udharo-pro-api/internal/shared/response"
 )
 
-type Authenticator func(http.Handler) http.Handler
-
 type SessionValidator interface {
 	IsSessionActive(ctx context.Context, tokenID string, userID int64, shopID int64) (bool, error)
 }
 
-func Auth(jwtSecret string, sessionValidator SessionValidator) Authenticator {
+func Auth(jwtSecret string, sessionValidator SessionValidator) Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			tokenString, err := bearerToken(r.Header.Get("Authorization"))
