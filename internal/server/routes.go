@@ -13,7 +13,7 @@ func (s *Server) registerRoutes() {
 
 	authHandler, authMiddleware := s.authModule()
 	auth.RegisterPublicRoutes(s.mux, authHandler)
-	s.registerProtectedRoutes(auth.ProtectedRoutes(authHandler), authMiddleware)
+	s.registerProtectedRoutes(auth.ProtectedRoutes(authHandler), authMiddleware, middleware.Tenant())
 }
 
 func (s *Server) registerProtectedRoutes(routes map[string]http.Handler, middlewares ...middleware.Middleware) {

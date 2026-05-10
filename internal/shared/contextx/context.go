@@ -1,6 +1,9 @@
 package contextx
 
-import "context"
+import (
+	"context"
+	"strconv"
+)
 
 type contextKey string
 
@@ -31,6 +34,20 @@ func GetUserID(ctx context.Context) (string, bool) {
 func GetShopID(ctx context.Context) (string, bool) {
 	shopID, ok := ctx.Value(shopIDKey).(string)
 	return shopID, ok
+}
+
+func GetShopIDInt64(ctx context.Context) (int64, bool) {
+	shopID, ok := GetShopID(ctx)
+	if !ok {
+		return 0, false
+	}
+
+	parsedShopID, err := strconv.ParseInt(shopID, 10, 64)
+	if err != nil {
+		return 0, false
+	}
+
+	return parsedShopID, true
 }
 
 func GetRole(ctx context.Context) (string, bool) {
