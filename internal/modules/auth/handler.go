@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"strconv"
 
 	"github.com/bibashjaprel/udharo-pro-api/internal/shared/contextx"
 	"github.com/bibashjaprel/udharo-pro-api/internal/shared/response"
@@ -15,6 +14,7 @@ type SignupService interface {
 	Signup(ctx context.Context, req SignupRequest) (SignupResponse, error)
 	Login(ctx context.Context, req LoginRequest) (LoginResponse, error)
 	Logout(ctx context.Context, tokenID string, userID int64, shopID int64) error
+	Me(ctx context.Context, userID int64, shopID int64) (CurrentUserResponse, error)
 }
 
 type Handler struct {
@@ -98,31 +98,19 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userID, ok := contextx.GetUserID(r.Context())
+	userID, ok := contextx.GetUserIDInt64(r.Context())
 	if !ok {
 		response.Error(w, http.StatusUnauthorized, "unauthorized", "unauthorized")
 		return
 	}
 
-	shopID, ok := contextx.GetShopID(r.Context())
+	shopID, ok := contextx.GetShopIDInt64(r.Context())
 	if !ok {
 		response.Error(w, http.StatusUnauthorized, "unauthorized", "unauthorized")
 		return
 	}
 
-	parsedUserID, err := strconv.ParseInt(userID, 10, 64)
-	if err != nil {
-		response.Error(w, http.StatusUnauthorized, "unauthorized", "unauthorized")
-		return
-	}
-
-	parsedShopID, err := strconv.ParseInt(shopID, 10, 64)
-	if err != nil {
-		response.Error(w, http.StatusUnauthorized, "unauthorized", "unauthorized")
-		return
-	}
-
-	if err := h.service.Logout(r.Context(), tokenID, parsedUserID, parsedShopID); err != nil {
+	if err := h.service.Logout(r.Context(), tokenID, userID, shopID); err != nil {
 		switch {
 		case errors.Is(err, ErrSessionNotFound):
 			response.Error(w, http.StatusUnauthorized, "unauthorized", "unauthorized")
@@ -133,6 +121,39 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.Success(w, http.StatusOK, "logged out successfully", LogoutResponse{Message: "logged out successfully"})
+}
+
+func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", http.MethodGet)
+		response.Error(w, http.StatusMethodNotAllowed, "method not allowed", "method not allowed")
+		return
+	}
+
+	userID, ok := contextx.GetUserIDInt64(r.Context())
+	if !ok {
+		response.Error(w, http.StatusUnauthorized, "unauthorized", "unauthorized")
+		return
+	}
+
+	shopID, ok := contextx.GetShopIDInt64(r.Context())
+	if !ok {
+		response.Error(w, http.StatusUnauthorized, "unauthorized", "unauthorized")
+		return
+	}
+
+	res, err := h.service.Me(r.Context(), userID, shopID)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrCurrentUserNotFound):
+			response.Error(w, http.StatusUnauthorized, "unauthorized", "unauthorized")
+		default:
+			response.Error(w, http.StatusInternalServerError, "profile fetch failed", "profile fetch failed")
+		}
+		return
+	}
+
+	response.Success(w, http.StatusOK, "current user fetched successfully", res)
 }
 
 func decodeJSON(r *http.Request, dest any) error {

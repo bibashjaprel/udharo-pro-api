@@ -31,6 +31,20 @@ func GetUserID(ctx context.Context) (string, bool) {
 	return userID, ok
 }
 
+func GetUserIDInt64(ctx context.Context) (int64, bool) {
+	userID, ok := GetUserID(ctx)
+	if !ok {
+		return 0, false
+	}
+
+	parsedUserID, err := strconv.ParseInt(userID, 10, 64)
+	if err != nil {
+		return 0, false
+	}
+
+	return parsedUserID, true
+}
+
 func GetShopID(ctx context.Context) (string, bool) {
 	shopID, ok := ctx.Value(shopIDKey).(string)
 	return shopID, ok

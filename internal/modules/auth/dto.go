@@ -51,3 +51,8 @@ type LoginShopInfo struct {
 type LogoutResponse struct {
 	Message string `json:"message"`
 }
+
+type CurrentUserResponse struct {
+	User LoginUserInfo `json:"user"`
+	Shop LoginShopInfo `json:"shop"`
+}

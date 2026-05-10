@@ -35,6 +35,10 @@ func (s *fakeLogoutService) Logout(_ context.Context, tokenID string, userID int
 	return s.err
 }
 
+func (s *fakeLogoutService) Me(_ context.Context, _ int64, _ int64) (CurrentUserResponse, error) {
+	return CurrentUserResponse{}, nil
+}
+
 func TestLogoutHandlerRevokesCurrentSession(t *testing.T) {
 	service := &fakeLogoutService{}
 	handler := NewHandler(service)
