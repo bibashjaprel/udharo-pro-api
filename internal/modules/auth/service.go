@@ -14,12 +14,13 @@ import (
 const trialDuration = 14 * 24 * time.Hour
 
 var (
-	ErrInvalidInput       = errors.New("invalid signup input")
-	ErrDuplicateEmail     = errors.New("email already exists")
-	ErrDuplicatePhone     = errors.New("phone already exists")
-	ErrDuplicateSignup    = errors.New("signup already exists")
-	ErrInvalidCredentials = errors.New("invalid credentials")
-	ErrSessionNotFound    = errors.New("session not found")
+	ErrInvalidInput        = errors.New("invalid signup input")
+	ErrDuplicateEmail      = errors.New("email already exists")
+	ErrDuplicatePhone      = errors.New("phone already exists")
+	ErrDuplicateSignup     = errors.New("signup already exists")
+	ErrInvalidCredentials  = errors.New("invalid credentials")
+	ErrSessionNotFound     = errors.New("session not found")
+	ErrCurrentUserNotFound = errors.New("current user not found")
 )
 
 type Service struct {
@@ -90,6 +91,10 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (LoginResponse, e
 
 func (s *Service) Logout(ctx context.Context, tokenID string, userID int64, shopID int64) error {
 	return s.repository.RevokeSession(ctx, tokenID, userID, shopID)
+}
+
+func (s *Service) Me(ctx context.Context, userID int64, shopID int64) (CurrentUserResponse, error) {
+	return s.repository.FindCurrentUser(ctx, userID, shopID)
 }
 
 func (s *Service) IsSessionActive(ctx context.Context, tokenID string, userID int64, shopID int64) (bool, error) {

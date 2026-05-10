@@ -31,6 +31,10 @@ func (s *fakeSignupService) Logout(_ context.Context, _ string, _ int64, _ int64
 	return nil
 }
 
+func (s *fakeSignupService) Me(_ context.Context, _ int64, _ int64) (CurrentUserResponse, error) {
+	return CurrentUserResponse{}, nil
+}
+
 func TestSignupHandlerCreatesSignup(t *testing.T) {
 	service := &fakeSignupService{
 		response: SignupResponse{

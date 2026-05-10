@@ -139,6 +139,49 @@ func (r *Repository) CreateUserSession(ctx context.Context, userID int64, shopID
 	return nil
 }
 
+func (r *Repository) FindCurrentUser(ctx context.Context, userID int64, shopID int64) (CurrentUserResponse, error) {
+	var res CurrentUserResponse
+
+	err := r.db.QueryRow(ctx, `
+		SELECT
+			u.id,
+			u.name,
+			u.email,
+			u.phone,
+			u.status,
+			sh.id,
+			sh.name,
+			sh.status,
+			su.role
+		FROM users u
+		JOIN shop_users su ON su.user_id = u.id
+		JOIN shops sh ON sh.id = su.shop_id
+		WHERE u.id = $1
+			AND sh.id = $2
+			AND u.deleted_at IS NULL
+			AND sh.deleted_at IS NULL
+		LIMIT 1
+	`, userID, shopID).Scan(
+		&res.User.ID,
+		&res.User.Name,
+		&res.User.Email,
+		&res.User.Phone,
+		&res.User.Status,
+		&res.Shop.ID,
+		&res.Shop.Name,
+		&res.Shop.Status,
+		&res.Shop.Role,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return CurrentUserResponse{}, ErrCurrentUserNotFound
+	}
+	if err != nil {
+		return CurrentUserResponse{}, fmt.Errorf("find current user: %w", err)
+	}
+
+	return res, nil
+}
+
 func (r *Repository) RevokeSession(ctx context.Context, tokenID string, userID int64, shopID int64) error {
 	commandTag, err := r.db.Exec(ctx, `
 		UPDATE user_sessions
