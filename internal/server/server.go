@@ -8,6 +8,7 @@ import (
 	"github.com/bibashjaprel/udharo-pro-api/internal/config"
 	"github.com/bibashjaprel/udharo-pro-api/internal/middleware"
 	"github.com/bibashjaprel/udharo-pro-api/internal/modules/auth"
+	"github.com/bibashjaprel/udharo-pro-api/internal/modules/shop"
 )
 
 type Server struct {
@@ -47,4 +48,9 @@ func (s *Server) authModule() (*auth.Handler, middleware.Middleware) {
 	authMiddleware := middleware.Auth(s.config.JWTSecret, authService)
 
 	return authHandler, authMiddleware
+}
+
+func (s *Server) shopModule() *shop.Handler {
+	shopService := shop.NewService(s.db)
+	return shop.NewHandler(shopService)
 }
