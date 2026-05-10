@@ -5,6 +5,7 @@ import (
 
 	"github.com/bibashjaprel/udharo-pro-api/internal/middleware"
 	"github.com/bibashjaprel/udharo-pro-api/internal/modules/auth"
+	"github.com/bibashjaprel/udharo-pro-api/internal/modules/shop"
 	"github.com/bibashjaprel/udharo-pro-api/internal/shared/response"
 )
 
@@ -14,6 +15,7 @@ func (s *Server) registerRoutes() {
 	authHandler, authMiddleware := s.authModule()
 	auth.RegisterPublicRoutes(s.mux, authHandler)
 	s.registerProtectedRoutes(auth.ProtectedRoutes(authHandler), authMiddleware, middleware.Tenant())
+	s.registerProtectedRoutes(shop.ProtectedRoutes(s.shopModule()), authMiddleware, middleware.Tenant())
 }
 
 func (s *Server) registerProtectedRoutes(routes map[string]http.Handler, middlewares ...middleware.Middleware) {
