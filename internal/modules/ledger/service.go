@@ -11,6 +11,7 @@ import (
 
 var (
 	ErrInvalidCreditEntry = errors.New("invalid credit entry")
+	ErrInvalidPagination  = errors.New("invalid pagination")
 	ErrCustomerNotFound   = errors.New("customer not found")
 )
 
@@ -33,6 +34,19 @@ func (s *Service) CreateCreditEntry(ctx context.Context, userID int64, shopID in
 	}
 
 	return s.repository.CreateCreditEntry(ctx, userID, shopID, customerID, entry)
+}
+
+func (s *Service) ListCustomerLedger(ctx context.Context, shopID int64, customerID int64, req ListLedgerEntriesRequest) (CustomerLedgerStatementResponse, error) {
+	if customerID < 1 {
+		return CustomerLedgerStatementResponse{}, ErrCustomerNotFound
+	}
+
+	req = normalizeListLedgerEntriesRequest(req)
+	if err := validateListLedgerEntriesRequest(req); err != nil {
+		return CustomerLedgerStatementResponse{}, err
+	}
+
+	return s.repository.ListCustomerLedger(ctx, shopID, customerID, req)
 }
 
 type createCreditEntryFields struct {
@@ -60,6 +74,24 @@ func normalizeCreateCreditEntryRequest(req CreateCreditEntryRequest) (createCred
 		Note:            optionalString(req.Note),
 		TransactionDate: transactionDate,
 	}, nil
+}
+
+func normalizeListLedgerEntriesRequest(req ListLedgerEntriesRequest) ListLedgerEntriesRequest {
+	if req.Page == 0 {
+		req.Page = 1
+	}
+	if req.Limit == 0 {
+		req.Limit = 20
+	}
+	return req
+}
+
+func validateListLedgerEntriesRequest(req ListLedgerEntriesRequest) error {
+	if req.Page < 1 || req.Limit < 1 || req.Limit > 100 {
+		return ErrInvalidPagination
+	}
+
+	return nil
 }
 
 func optionalString(value *string) *string {

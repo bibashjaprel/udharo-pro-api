@@ -27,6 +27,10 @@ func (s *Server) registerRoutes() {
 				ledgerHandler.CreateCreditEntry(w, r)
 				return
 			}
+			if ledger.IsLedgerPath(r.URL.Path) {
+				ledgerHandler.ListCustomerLedger(w, r)
+				return
+			}
 
 			customerHandler.CustomerDetails(w, r)
 		}),

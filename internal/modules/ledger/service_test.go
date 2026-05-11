@@ -42,10 +42,41 @@ func TestNormalizeCreateCreditEntryRequestRejectsInvalidInput(t *testing.T) {
 	}
 }
 
+func TestNormalizeListLedgerEntriesRequestDefaultsPagination(t *testing.T) {
+	req := normalizeListLedgerEntriesRequest(ListLedgerEntriesRequest{})
+
+	if req.Page != 1 || req.Limit != 20 {
+		t.Fatalf("expected default pagination, got %+v", req)
+	}
+}
+
+func TestValidateListLedgerEntriesRequestRejectsInvalidPagination(t *testing.T) {
+	tests := []ListLedgerEntriesRequest{
+		{Page: 0, Limit: 20},
+		{Page: 1, Limit: 0},
+		{Page: 1, Limit: 101},
+	}
+
+	for _, tt := range tests {
+		if err := validateListLedgerEntriesRequest(tt); !errors.Is(err, ErrInvalidPagination) {
+			t.Fatalf("expected ErrInvalidPagination for %+v, got %v", tt, err)
+		}
+	}
+}
+
 func TestCreateCreditEntryRejectsInvalidCustomerID(t *testing.T) {
 	service := &Service{}
 
 	_, err := service.CreateCreditEntry(nil, 1, 1, 0, CreateCreditEntryRequest{Amount: 1500})
+	if !errors.Is(err, ErrCustomerNotFound) {
+		t.Fatalf("expected ErrCustomerNotFound, got %v", err)
+	}
+}
+
+func TestListCustomerLedgerRejectsInvalidCustomerID(t *testing.T) {
+	service := &Service{}
+
+	_, err := service.ListCustomerLedger(nil, 1, 0, ListLedgerEntriesRequest{})
 	if !errors.Is(err, ErrCustomerNotFound) {
 		t.Fatalf("expected ErrCustomerNotFound, got %v", err)
 	}
