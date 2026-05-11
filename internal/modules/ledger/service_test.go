@@ -3,6 +3,7 @@ package ledger
 import (
 	"errors"
 	"testing"
+	"time"
 )
 
 func TestNormalizeCreateCreditEntryRequest(t *testing.T) {
@@ -32,6 +33,7 @@ func TestNormalizeCreateCreditEntryRequestRejectsInvalidInput(t *testing.T) {
 	tests := []CreateCreditEntryRequest{
 		{Amount: 0},
 		{Amount: -1},
+		{Amount: 1500},
 		{Amount: 1500, TransactionDate: "05-09-2026"},
 	}
 
@@ -39,6 +41,42 @@ func TestNormalizeCreateCreditEntryRequestRejectsInvalidInput(t *testing.T) {
 		if _, err := normalizeCreateCreditEntryRequest(tt); !errors.Is(err, ErrInvalidCreditEntry) {
 			t.Fatalf("expected ErrInvalidCreditEntry for %+v, got %v", tt, err)
 		}
+	}
+}
+
+func TestValidateLedgerEntryFieldsRejectsInvalidEntryType(t *testing.T) {
+	fields := createCreditEntryFields{
+		EntryType:       "invalid",
+		Amount:          1500,
+		TransactionDate: mustParseDate(t, "2026-05-09"),
+	}
+
+	if err := validateLedgerEntryFields(fields); !errors.Is(err, ErrInvalidCreditEntry) {
+		t.Fatalf("expected ErrInvalidCreditEntry, got %v", err)
+	}
+}
+
+func TestValidateLedgerEntryFieldsRejectsMissingTransactionDate(t *testing.T) {
+	fields := createCreditEntryFields{
+		EntryType: EntryTypeCredit,
+		Amount:    1500,
+	}
+
+	if err := validateLedgerEntryFields(fields); !errors.Is(err, ErrInvalidCreditEntry) {
+		t.Fatalf("expected ErrInvalidCreditEntry, got %v", err)
+	}
+}
+
+func TestValidEntryType(t *testing.T) {
+	validTypes := []string{EntryTypeCredit, EntryTypePayment, EntryTypeAdjustment}
+	for _, entryType := range validTypes {
+		if !validEntryType(entryType) {
+			t.Fatalf("expected entry type %q to be valid", entryType)
+		}
+	}
+
+	if validEntryType("refund") {
+		t.Fatal("expected invalid entry type to be rejected")
 	}
 }
 
@@ -80,4 +118,15 @@ func TestListCustomerLedgerRejectsInvalidCustomerID(t *testing.T) {
 	if !errors.Is(err, ErrCustomerNotFound) {
 		t.Fatalf("expected ErrCustomerNotFound, got %v", err)
 	}
+}
+
+func mustParseDate(t *testing.T, value string) time.Time {
+	t.Helper()
+
+	parsed, err := time.Parse("2006-01-02", value)
+	if err != nil {
+		t.Fatalf("parse date: %v", err)
+	}
+
+	return parsed
 }

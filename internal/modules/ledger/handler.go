@@ -63,7 +63,7 @@ func (h *Handler) CreateCreditEntry(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrInvalidCreditEntry):
-			response.Error(w, http.StatusBadRequest, "invalid request", "invalid credit entry")
+			response.Error(w, http.StatusBadRequest, "invalid request", "amount greater than 0 and transaction_date are required")
 		case errors.Is(err, ErrCustomerNotFound):
 			response.Error(w, http.StatusNotFound, "customer not found", "customer not found")
 		default:

@@ -39,7 +39,7 @@ func (r *Repository) CreateCreditEntry(ctx context.Context, userID int64, shopID
 		INSERT INTO ledger_entries (shop_id, customer_id, entry_type, amount, note, transaction_date, status, created_by)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING id, shop_id, customer_id, entry_type, amount, note, transaction_date, status, created_by, created_at, updated_at
-	`, shopID, customerID, "credit", fields.Amount, fields.Note, fields.TransactionDate, "active", userID).Scan(
+	`, shopID, customerID, fields.EntryType, fields.Amount, fields.Note, fields.TransactionDate, "active", userID).Scan(
 		&res.ID,
 		&res.ShopID,
 		&res.CustomerID,

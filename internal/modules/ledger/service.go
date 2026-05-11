@@ -3,10 +3,17 @@ package ledger
 import (
 	"context"
 	"errors"
+	"math"
 	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+const (
+	EntryTypeCredit     = "credit"
+	EntryTypePayment    = "payment"
+	EntryTypeAdjustment = "adjustment"
 )
 
 var (
@@ -50,30 +57,29 @@ func (s *Service) ListCustomerLedger(ctx context.Context, shopID int64, customer
 }
 
 type createCreditEntryFields struct {
+	EntryType       string
 	Amount          float64
 	Note            *string
 	TransactionDate time.Time
 }
 
 func normalizeCreateCreditEntryRequest(req CreateCreditEntryRequest) (createCreditEntryFields, error) {
-	if req.Amount <= 0 {
-		return createCreditEntryFields{}, ErrInvalidCreditEntry
+	transactionDate, err := parseRequiredTransactionDate(req.TransactionDate)
+	if err != nil {
+		return createCreditEntryFields{}, err
 	}
 
-	transactionDate := time.Now().UTC()
-	if strings.TrimSpace(req.TransactionDate) != "" {
-		parsed, err := time.Parse("2006-01-02", strings.TrimSpace(req.TransactionDate))
-		if err != nil {
-			return createCreditEntryFields{}, ErrInvalidCreditEntry
-		}
-		transactionDate = parsed
-	}
-
-	return createCreditEntryFields{
+	fields := createCreditEntryFields{
+		EntryType:       EntryTypeCredit,
 		Amount:          req.Amount,
 		Note:            optionalString(req.Note),
 		TransactionDate: transactionDate,
-	}, nil
+	}
+	if err := validateLedgerEntryFields(fields); err != nil {
+		return createCreditEntryFields{}, err
+	}
+
+	return fields, nil
 }
 
 func normalizeListLedgerEntriesRequest(req ListLedgerEntriesRequest) ListLedgerEntriesRequest {
@@ -92,6 +98,43 @@ func validateListLedgerEntriesRequest(req ListLedgerEntriesRequest) error {
 	}
 
 	return nil
+}
+
+func parseRequiredTransactionDate(value string) (time.Time, error) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return time.Time{}, ErrInvalidCreditEntry
+	}
+
+	transactionDate, err := time.Parse("2006-01-02", trimmed)
+	if err != nil {
+		return time.Time{}, ErrInvalidCreditEntry
+	}
+
+	return transactionDate, nil
+}
+
+func validateLedgerEntryFields(fields createCreditEntryFields) error {
+	if !validEntryType(fields.EntryType) {
+		return ErrInvalidCreditEntry
+	}
+	if fields.Amount <= 0 || math.IsNaN(fields.Amount) || math.IsInf(fields.Amount, 0) {
+		return ErrInvalidCreditEntry
+	}
+	if fields.TransactionDate.IsZero() {
+		return ErrInvalidCreditEntry
+	}
+
+	return nil
+}
+
+func validEntryType(entryType string) bool {
+	switch entryType {
+	case EntryTypeCredit, EntryTypePayment, EntryTypeAdjustment:
+		return true
+	default:
+		return false
+	}
 }
 
 func optionalString(value *string) *string {
