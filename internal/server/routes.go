@@ -6,6 +6,7 @@ import (
 	"github.com/bibashjaprel/udharo-pro-api/internal/middleware"
 	"github.com/bibashjaprel/udharo-pro-api/internal/modules/auth"
 	"github.com/bibashjaprel/udharo-pro-api/internal/modules/customer"
+	"github.com/bibashjaprel/udharo-pro-api/internal/modules/ledger"
 	"github.com/bibashjaprel/udharo-pro-api/internal/modules/shop"
 	"github.com/bibashjaprel/udharo-pro-api/internal/shared/response"
 )
@@ -17,7 +18,19 @@ func (s *Server) registerRoutes() {
 	auth.RegisterPublicRoutes(s.mux, authHandler)
 	s.registerProtectedRoutes(auth.ProtectedRoutes(authHandler), authMiddleware, middleware.Tenant())
 	s.registerProtectedRoutes(shop.ProtectedRoutes(s.shopModule()), authMiddleware, middleware.Tenant())
-	s.registerProtectedRoutes(customer.ProtectedRoutes(s.customerModule()), authMiddleware, middleware.Tenant())
+	customerHandler := s.customerModule()
+	ledgerHandler := s.ledgerModule()
+	s.registerProtectedRoutes(customer.ProtectedRoutes(customerHandler), authMiddleware, middleware.Tenant())
+	s.registerProtectedRoutes(map[string]http.Handler{
+		customer.CustomerDetailsPath: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if ledger.IsCreditPath(r.URL.Path) {
+				ledgerHandler.CreateCreditEntry(w, r)
+				return
+			}
+
+			customerHandler.CustomerDetails(w, r)
+		}),
+	}, authMiddleware, middleware.Tenant())
 }
 
 func (s *Server) registerProtectedRoutes(routes map[string]http.Handler, middlewares ...middleware.Middleware) {

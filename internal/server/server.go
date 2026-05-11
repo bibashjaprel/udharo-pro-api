@@ -9,6 +9,7 @@ import (
 	"github.com/bibashjaprel/udharo-pro-api/internal/middleware"
 	"github.com/bibashjaprel/udharo-pro-api/internal/modules/auth"
 	"github.com/bibashjaprel/udharo-pro-api/internal/modules/customer"
+	"github.com/bibashjaprel/udharo-pro-api/internal/modules/ledger"
 	"github.com/bibashjaprel/udharo-pro-api/internal/modules/shop"
 )
 
@@ -67,4 +68,9 @@ func (s *Server) shopModule() *shop.Handler {
 func (s *Server) customerModule() *customer.Handler {
 	customerService := customer.NewService(s.db)
 	return customer.NewHandler(customerService)
+}
+
+func (s *Server) ledgerModule() *ledger.Handler {
+	ledgerService := ledger.NewService(s.db)
+	return ledger.NewHandler(ledgerService)
 }
