@@ -148,6 +148,41 @@ func (r *Repository) ListCustomers(ctx context.Context, shopID int64, req ListCu
 	}, nil
 }
 
+func (r *Repository) GetCustomer(ctx context.Context, shopID int64, customerID int64) (CustomerDetailsResponse, error) {
+	var res CustomerDetailsResponse
+	var address sql.NullString
+	var notes sql.NullString
+
+	err := r.db.QueryRow(ctx, `
+		SELECT id, shop_id, name, phone, address, notes, created_at, updated_at
+		FROM customers
+		WHERE id = $1
+			AND shop_id = $2
+			AND deleted_at IS NULL
+	`, customerID, shopID).Scan(
+		&res.ID,
+		&res.ShopID,
+		&res.Name,
+		&res.Phone,
+		&address,
+		&notes,
+		&res.CreatedAt,
+		&res.UpdatedAt,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return CustomerDetailsResponse{}, ErrCustomerNotFound
+	}
+	if err != nil {
+		return CustomerDetailsResponse{}, fmt.Errorf("get customer: %w", err)
+	}
+
+	res.Address = nullableString(address)
+	res.Notes = nullableString(notes)
+	res.CurrentBalance = 0
+
+	return res, nil
+}
+
 func mapCreateCustomerDBError(err error) error {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "idx_customers_shop_id_phone_unique" {

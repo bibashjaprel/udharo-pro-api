@@ -58,3 +58,12 @@ func TestValidateListCustomersRequestRejectsInvalidPagination(t *testing.T) {
 		}
 	}
 }
+
+func TestGetCustomerRejectsInvalidID(t *testing.T) {
+	service := &Service{}
+
+	_, err := service.GetCustomer(nil, 1, 0)
+	if !errors.Is(err, ErrCustomerNotFound) {
+		t.Fatalf("expected ErrCustomerNotFound, got %v", err)
+	}
+}

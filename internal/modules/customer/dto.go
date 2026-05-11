@@ -22,6 +22,11 @@ type ListCustomersResponse struct {
 	Total     int64              `json:"total"`
 }
 
+type CustomerDetailsResponse struct {
+	CustomerResponse
+	CurrentBalance float64 `json:"current_balance"`
+}
+
 type CustomerResponse struct {
 	ID        int64     `json:"id"`
 	ShopID    int64     `json:"shop_id"`

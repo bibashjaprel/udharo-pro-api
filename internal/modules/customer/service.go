@@ -12,6 +12,7 @@ var (
 	ErrInvalidCustomer        = errors.New("invalid customer")
 	ErrDuplicateCustomerPhone = errors.New("customer phone already exists")
 	ErrInvalidPagination      = errors.New("invalid pagination")
+	ErrCustomerNotFound       = errors.New("customer not found")
 )
 
 type Service struct {
@@ -38,6 +39,14 @@ func (s *Service) ListCustomers(ctx context.Context, shopID int64, req ListCusto
 	}
 
 	return s.repository.ListCustomers(ctx, shopID, req)
+}
+
+func (s *Service) GetCustomer(ctx context.Context, shopID int64, customerID int64) (CustomerDetailsResponse, error) {
+	if customerID < 1 {
+		return CustomerDetailsResponse{}, ErrCustomerNotFound
+	}
+
+	return s.repository.GetCustomer(ctx, shopID, customerID)
 }
 
 func normalizeCreateCustomerRequest(req CreateCustomerRequest) CreateCustomerRequest {
