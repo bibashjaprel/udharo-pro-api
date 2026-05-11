@@ -34,6 +34,12 @@ type CustomerDetailsResponse struct {
 	CurrentBalance float64 `json:"current_balance"`
 }
 
+type CustomerBalanceResponse struct {
+	CustomerID int64   `json:"customer_id"`
+	ShopID     int64   `json:"shop_id"`
+	Balance    float64 `json:"balance"`
+}
+
 type CustomerResponse struct {
 	ID        int64     `json:"id"`
 	ShopID    int64     `json:"shop_id"`

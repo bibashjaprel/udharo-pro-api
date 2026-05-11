@@ -314,9 +314,30 @@ func (r *Repository) GetCustomer(ctx context.Context, shopID int64, customerID i
 
 	res.Address = nullableString(address)
 	res.Notes = nullableString(notes)
-	res.CurrentBalance = 0
+	balance, err := r.calculateCustomerBalance(ctx, shopID, customerID)
+	if err != nil {
+		return CustomerDetailsResponse{}, err
+	}
+	res.CurrentBalance = balance
 
 	return res, nil
+}
+
+func (r *Repository) GetCustomerBalance(ctx context.Context, shopID int64, customerID int64) (CustomerBalanceResponse, error) {
+	if err := r.ensureCustomerExists(ctx, shopID, customerID); err != nil {
+		return CustomerBalanceResponse{}, err
+	}
+
+	balance, err := r.calculateCustomerBalance(ctx, shopID, customerID)
+	if err != nil {
+		return CustomerBalanceResponse{}, err
+	}
+
+	return CustomerBalanceResponse{
+		CustomerID: customerID,
+		ShopID:     shopID,
+		Balance:    balance,
+	}, nil
 }
 
 type customerQuerier interface {
@@ -356,6 +377,49 @@ func (r *Repository) getCustomerForUpdate(ctx context.Context, q customerQuerier
 	res.Notes = nullableString(notes)
 
 	return res, nil
+}
+
+func (r *Repository) ensureCustomerExists(ctx context.Context, shopID int64, customerID int64) error {
+	var id int64
+	err := r.db.QueryRow(ctx, `
+		SELECT id
+		FROM customers
+		WHERE id = $1
+			AND shop_id = $2
+			AND deleted_at IS NULL
+	`, customerID, shopID).Scan(&id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrCustomerNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("ensure customer exists: %w", err)
+	}
+
+	return nil
+}
+
+func (r *Repository) calculateCustomerBalance(ctx context.Context, shopID int64, customerID int64) (float64, error) {
+	var balance float64
+	err := r.db.QueryRow(ctx, `
+		SELECT COALESCE(SUM(
+			CASE entry_type
+				WHEN 'credit' THEN amount
+				WHEN 'payment' THEN -amount
+				WHEN 'adjustment' THEN amount
+				ELSE 0
+			END
+		), 0)
+		FROM ledger_entries
+		WHERE shop_id = $1
+			AND customer_id = $2
+			AND status = 'active'
+			AND deleted_at IS NULL
+	`, shopID, customerID).Scan(&balance)
+	if err != nil {
+		return 0, fmt.Errorf("calculate customer balance: %w", err)
+	}
+
+	return balance, nil
 }
 
 func mapCreateCustomerDBError(err error) error {

@@ -14,26 +14,29 @@ import (
 )
 
 type fakeCustomerService struct {
-	response       CustomerResponse
-	updateResponse CustomerResponse
-	listResponse   ListCustomersResponse
-	detailResponse CustomerDetailsResponse
-	err            error
-	updateErr      error
-	deleteErr      error
-	listErr        error
-	detailErr      error
-	userID         int64
-	shopID         int64
-	customerID     int64
-	request        CreateCustomerRequest
-	updateRequest  UpdateCustomerRequest
-	listRequest    ListCustomersRequest
-	called         bool
-	updateCalled   bool
-	deleteCalled   bool
-	listCalled     bool
-	getCalled      bool
+	response        CustomerResponse
+	updateResponse  CustomerResponse
+	listResponse    ListCustomersResponse
+	detailResponse  CustomerDetailsResponse
+	balanceResponse CustomerBalanceResponse
+	err             error
+	updateErr       error
+	deleteErr       error
+	listErr         error
+	detailErr       error
+	balanceErr      error
+	userID          int64
+	shopID          int64
+	customerID      int64
+	request         CreateCustomerRequest
+	updateRequest   UpdateCustomerRequest
+	listRequest     ListCustomersRequest
+	called          bool
+	updateCalled    bool
+	deleteCalled    bool
+	listCalled      bool
+	getCalled       bool
+	balanceCalled   bool
 }
 
 func (s *fakeCustomerService) CreateCustomer(_ context.Context, userID int64, shopID int64, req CreateCustomerRequest) (CustomerResponse, error) {
@@ -73,6 +76,107 @@ func (s *fakeCustomerService) GetCustomer(_ context.Context, shopID int64, custo
 	s.shopID = shopID
 	s.customerID = customerID
 	return s.detailResponse, s.detailErr
+}
+
+func (s *fakeCustomerService) GetCustomerBalance(_ context.Context, shopID int64, customerID int64) (CustomerBalanceResponse, error) {
+	s.balanceCalled = true
+	s.shopID = shopID
+	s.customerID = customerID
+	return s.balanceResponse, s.balanceErr
+}
+
+func TestCustomerBalanceHandlerGetsBalance(t *testing.T) {
+	service := &fakeCustomerService{
+		balanceResponse: CustomerBalanceResponse{
+			CustomerID: 5,
+			ShopID:     2,
+			Balance:    125.50,
+		},
+	}
+	handler := NewHandler(service)
+
+	ctx := contextx.WithShopID(context.Background(), "2")
+	req := httptest.NewRequest(http.MethodGet, CustomersPath+"/5/balance", nil).WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	handler.CustomerDetails(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+	if !service.balanceCalled {
+		t.Fatal("expected customer balance service to be called")
+	}
+	if service.shopID != 2 || service.customerID != 5 {
+		t.Fatalf("unexpected balance args: shop=%d customer=%d", service.shopID, service.customerID)
+	}
+
+	var response struct {
+		Success bool                    `json:"success"`
+		Data    CustomerBalanceResponse `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !response.Success || response.Data.Balance != 125.50 {
+		t.Fatalf("unexpected response: %+v", response)
+	}
+}
+
+func TestCustomerBalanceHandlerRequiresTenant(t *testing.T) {
+	handler := NewHandler(&fakeCustomerService{})
+	req := httptest.NewRequest(http.MethodGet, CustomersPath+"/5/balance", nil)
+	rec := httptest.NewRecorder()
+
+	handler.CustomerBalance(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected status %d, got %d", http.StatusUnauthorized, rec.Code)
+	}
+}
+
+func TestCustomerBalanceHandlerRejectsInvalidID(t *testing.T) {
+	handler := NewHandler(&fakeCustomerService{})
+
+	ctx := contextx.WithShopID(context.Background(), "2")
+	req := httptest.NewRequest(http.MethodGet, CustomersPath+"/abc/balance", nil).WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	handler.CustomerBalance(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, rec.Code)
+	}
+}
+
+func TestCustomerBalanceHandlerReturnsNotFound(t *testing.T) {
+	service := &fakeCustomerService{balanceErr: ErrCustomerNotFound}
+	handler := NewHandler(service)
+
+	ctx := contextx.WithShopID(context.Background(), "2")
+	req := httptest.NewRequest(http.MethodGet, CustomersPath+"/5/balance", nil).WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	handler.CustomerBalance(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected status %d, got %d", http.StatusNotFound, rec.Code)
+	}
+}
+
+func TestCustomerBalanceHandlerRejectsInvalidMethod(t *testing.T) {
+	handler := NewHandler(&fakeCustomerService{})
+	req := httptest.NewRequest(http.MethodPost, CustomersPath+"/5/balance", nil)
+	rec := httptest.NewRecorder()
+
+	handler.CustomerBalance(rec, req)
+
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("expected status %d, got %d", http.StatusMethodNotAllowed, rec.Code)
+	}
+	if rec.Header().Get("Allow") != http.MethodGet {
+		t.Fatalf("expected Allow header %q, got %q", http.MethodGet, rec.Header().Get("Allow"))
+	}
 }
 
 func TestDeleteCustomerHandlerDeletesCustomer(t *testing.T) {
