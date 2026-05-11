@@ -20,6 +20,7 @@ type fakeCustomerService struct {
 	detailResponse CustomerDetailsResponse
 	err            error
 	updateErr      error
+	deleteErr      error
 	listErr        error
 	detailErr      error
 	userID         int64
@@ -30,6 +31,7 @@ type fakeCustomerService struct {
 	listRequest    ListCustomersRequest
 	called         bool
 	updateCalled   bool
+	deleteCalled   bool
 	listCalled     bool
 	getCalled      bool
 }
@@ -51,6 +53,14 @@ func (s *fakeCustomerService) UpdateCustomer(_ context.Context, userID int64, sh
 	return s.updateResponse, s.updateErr
 }
 
+func (s *fakeCustomerService) DeleteCustomer(_ context.Context, userID int64, shopID int64, customerID int64) error {
+	s.deleteCalled = true
+	s.userID = userID
+	s.shopID = shopID
+	s.customerID = customerID
+	return s.deleteErr
+}
+
 func (s *fakeCustomerService) ListCustomers(_ context.Context, shopID int64, req ListCustomersRequest) (ListCustomersResponse, error) {
 	s.listCalled = true
 	s.shopID = shopID
@@ -63,6 +73,74 @@ func (s *fakeCustomerService) GetCustomer(_ context.Context, shopID int64, custo
 	s.shopID = shopID
 	s.customerID = customerID
 	return s.detailResponse, s.detailErr
+}
+
+func TestDeleteCustomerHandlerDeletesCustomer(t *testing.T) {
+	service := &fakeCustomerService{}
+	handler := NewHandler(service)
+
+	ctx := contextx.WithUserID(context.Background(), "1")
+	ctx = contextx.WithShopID(ctx, "2")
+
+	req := httptest.NewRequest(http.MethodDelete, CustomersPath+"/5", nil).WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	handler.CustomerDetails(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+	if !service.deleteCalled {
+		t.Fatal("expected customer delete service to be called")
+	}
+	if service.userID != 1 || service.shopID != 2 || service.customerID != 5 {
+		t.Fatalf("unexpected delete args: user=%d shop=%d customer=%d", service.userID, service.shopID, service.customerID)
+	}
+}
+
+func TestDeleteCustomerHandlerRequiresAuthentication(t *testing.T) {
+	handler := NewHandler(&fakeCustomerService{})
+	req := httptest.NewRequest(http.MethodDelete, CustomersPath+"/5", nil)
+	rec := httptest.NewRecorder()
+
+	handler.DeleteCustomer(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected status %d, got %d", http.StatusUnauthorized, rec.Code)
+	}
+}
+
+func TestDeleteCustomerHandlerRejectsInvalidID(t *testing.T) {
+	handler := NewHandler(&fakeCustomerService{})
+
+	ctx := contextx.WithUserID(context.Background(), "1")
+	ctx = contextx.WithShopID(ctx, "2")
+
+	req := httptest.NewRequest(http.MethodDelete, CustomersPath+"/abc", nil).WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	handler.DeleteCustomer(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, rec.Code)
+	}
+}
+
+func TestDeleteCustomerHandlerReturnsNotFound(t *testing.T) {
+	service := &fakeCustomerService{deleteErr: ErrCustomerNotFound}
+	handler := NewHandler(service)
+
+	ctx := contextx.WithUserID(context.Background(), "1")
+	ctx = contextx.WithShopID(ctx, "2")
+
+	req := httptest.NewRequest(http.MethodDelete, CustomersPath+"/5", nil).WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	handler.DeleteCustomer(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected status %d, got %d", http.StatusNotFound, rec.Code)
+	}
 }
 
 func TestUpdateCustomerHandlerUpdatesCustomer(t *testing.T) {
@@ -306,8 +384,8 @@ func TestCustomerDetailsHandlerRejectsInvalidMethod(t *testing.T) {
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("expected status %d, got %d", http.StatusMethodNotAllowed, rec.Code)
 	}
-	if rec.Header().Get("Allow") != "GET, PATCH" {
-		t.Fatalf("expected Allow header %q, got %q", "GET, PATCH", rec.Header().Get("Allow"))
+	if rec.Header().Get("Allow") != "GET, PATCH, DELETE" {
+		t.Fatalf("expected Allow header %q, got %q", "GET, PATCH, DELETE", rec.Header().Get("Allow"))
 	}
 }
 

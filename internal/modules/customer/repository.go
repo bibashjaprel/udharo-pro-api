@@ -233,6 +233,57 @@ func (r *Repository) UpdateCustomer(ctx context.Context, userID int64, shopID in
 	return res, nil
 }
 
+func (r *Repository) DeleteCustomer(ctx context.Context, userID int64, shopID int64, customerID int64) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin customer delete transaction: %w", err)
+	}
+	defer func() {
+		_ = tx.Rollback(ctx)
+	}()
+
+	customer, err := r.getCustomerForUpdate(ctx, tx, shopID, customerID)
+	if err != nil {
+		return err
+	}
+
+	tag, err := tx.Exec(ctx, `
+		UPDATE customers
+		SET deleted_at = NOW(),
+			updated_at = NOW()
+		WHERE id = $1
+			AND shop_id = $2
+			AND deleted_at IS NULL
+	`, customerID, shopID)
+	if err != nil {
+		return fmt.Errorf("soft delete customer: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrCustomerNotFound
+	}
+
+	metadata, err := json.Marshal(map[string]any{
+		"customer": customerAuditValues(customer),
+	})
+	if err != nil {
+		return fmt.Errorf("encode customer delete audit metadata: %w", err)
+	}
+
+	_, err = tx.Exec(ctx, `
+		INSERT INTO audit_logs (shop_id, user_id, action, entity_type, entity_id, metadata)
+		VALUES ($1, $2, $3, $4, $5, $6)
+	`, shopID, userID, "customer.deleted", "customer", customer.ID, metadata)
+	if err != nil {
+		return fmt.Errorf("create customer delete audit log: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit customer delete transaction: %w", err)
+	}
+
+	return nil
+}
+
 func (r *Repository) GetCustomer(ctx context.Context, shopID int64, customerID int64) (CustomerDetailsResponse, error) {
 	var res CustomerDetailsResponse
 	var address sql.NullString
