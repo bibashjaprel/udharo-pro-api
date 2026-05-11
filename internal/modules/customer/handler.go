@@ -14,6 +14,7 @@ import (
 
 type CustomerService interface {
 	CreateCustomer(ctx context.Context, userID int64, shopID int64, req CreateCustomerRequest) (CustomerResponse, error)
+	UpdateCustomer(ctx context.Context, userID int64, shopID int64, customerID int64, req UpdateCustomerRequest) (CustomerResponse, error)
 	ListCustomers(ctx context.Context, shopID int64, req ListCustomersRequest) (ListCustomersResponse, error)
 	GetCustomer(ctx context.Context, shopID int64, customerID int64) (CustomerDetailsResponse, error)
 }
@@ -39,12 +40,18 @@ func (h *Handler) Customers(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) CustomerDetails(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		w.Header().Set("Allow", http.MethodGet)
+	switch r.Method {
+	case http.MethodGet:
+		h.GetCustomer(w, r)
+	case http.MethodPatch:
+		h.UpdateCustomer(w, r)
+	default:
+		w.Header().Set("Allow", "GET, PATCH")
 		response.Error(w, http.StatusMethodNotAllowed, "method not allowed", "method not allowed")
-		return
 	}
+}
 
+func (h *Handler) GetCustomer(w http.ResponseWriter, r *http.Request) {
 	shopID, ok := contextx.GetShopIDInt64(r.Context())
 	if !ok {
 		response.Error(w, http.StatusUnauthorized, "unauthorized", "unauthorized")
@@ -69,6 +76,51 @@ func (h *Handler) CustomerDetails(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.Success(w, http.StatusOK, "customer fetched successfully", res)
+}
+
+func (h *Handler) UpdateCustomer(w http.ResponseWriter, r *http.Request) {
+	userID, ok := contextx.GetUserIDInt64(r.Context())
+	if !ok {
+		response.Error(w, http.StatusUnauthorized, "unauthorized", "unauthorized")
+		return
+	}
+
+	shopID, ok := contextx.GetShopIDInt64(r.Context())
+	if !ok {
+		response.Error(w, http.StatusUnauthorized, "unauthorized", "unauthorized")
+		return
+	}
+
+	customerID, err := customerIDFromPath(r.URL.Path)
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "invalid request", "invalid customer id")
+		return
+	}
+
+	var req UpdateCustomerRequest
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&req); err != nil {
+		response.Error(w, http.StatusBadRequest, "invalid request", "invalid json body")
+		return
+	}
+
+	res, err := h.service.UpdateCustomer(r.Context(), userID, shopID, customerID, req)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrInvalidCustomer):
+			response.Error(w, http.StatusBadRequest, "invalid request", "invalid customer")
+		case errors.Is(err, ErrCustomerNotFound):
+			response.Error(w, http.StatusNotFound, "customer not found", "customer not found")
+		case errors.Is(err, ErrDuplicateCustomerPhone):
+			response.Error(w, http.StatusConflict, "customer already exists", "customer phone already exists")
+		default:
+			response.Error(w, http.StatusInternalServerError, "customer update failed", "customer update failed")
+		}
+		return
+	}
+
+	response.Success(w, http.StatusOK, "customer updated successfully", res)
 }
 
 func (h *Handler) ListCustomers(w http.ResponseWriter, r *http.Request) {
@@ -185,5 +237,10 @@ func customerIDFromPath(path string) (int64, error) {
 		return 0, strconv.ErrSyntax
 	}
 
-	return strconv.ParseInt(id, 10, 64)
+	customerID, err := strconv.ParseInt(id, 10, 64)
+	if err != nil || customerID < 1 {
+		return 0, strconv.ErrSyntax
+	}
+
+	return customerID, nil
 }

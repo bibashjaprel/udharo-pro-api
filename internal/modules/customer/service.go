@@ -32,6 +32,19 @@ func (s *Service) CreateCustomer(ctx context.Context, userID int64, shopID int64
 	return s.repository.CreateCustomer(ctx, userID, shopID, req)
 }
 
+func (s *Service) UpdateCustomer(ctx context.Context, userID int64, shopID int64, customerID int64, req UpdateCustomerRequest) (CustomerResponse, error) {
+	if customerID < 1 {
+		return CustomerResponse{}, ErrCustomerNotFound
+	}
+
+	fields, err := normalizeUpdateCustomerRequest(req)
+	if err != nil {
+		return CustomerResponse{}, err
+	}
+
+	return s.repository.UpdateCustomer(ctx, userID, shopID, customerID, fields)
+}
+
 func (s *Service) ListCustomers(ctx context.Context, shopID int64, req ListCustomersRequest) (ListCustomersResponse, error) {
 	req = normalizeListCustomersRequest(req)
 	if err := validateListCustomersRequest(req); err != nil {
@@ -63,6 +76,55 @@ func validateCreateCustomerRequest(req CreateCustomerRequest) error {
 	}
 
 	return nil
+}
+
+type updateCustomerFields struct {
+	NameSet    bool
+	Name       string
+	PhoneSet   bool
+	Phone      string
+	AddressSet bool
+	Address    *string
+	NotesSet   bool
+	Notes      *string
+}
+
+func normalizeUpdateCustomerRequest(req UpdateCustomerRequest) (updateCustomerFields, error) {
+	fields := updateCustomerFields{}
+
+	if req.Name != nil {
+		name := strings.TrimSpace(*req.Name)
+		if name == "" {
+			return updateCustomerFields{}, ErrInvalidCustomer
+		}
+		fields.NameSet = true
+		fields.Name = name
+	}
+
+	if req.Phone != nil {
+		phone := strings.TrimSpace(*req.Phone)
+		if phone == "" {
+			return updateCustomerFields{}, ErrInvalidCustomer
+		}
+		fields.PhoneSet = true
+		fields.Phone = phone
+	}
+
+	if req.Address != nil {
+		fields.AddressSet = true
+		fields.Address = optionalString(req.Address)
+	}
+
+	if req.Notes != nil {
+		fields.NotesSet = true
+		fields.Notes = optionalString(req.Notes)
+	}
+
+	if !fields.NameSet && !fields.PhoneSet && !fields.AddressSet && !fields.NotesSet {
+		return updateCustomerFields{}, ErrInvalidCustomer
+	}
+
+	return fields, nil
 }
 
 func normalizeListCustomersRequest(req ListCustomersRequest) ListCustomersRequest {
