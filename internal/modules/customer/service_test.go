@@ -121,3 +121,12 @@ func TestUpdateCustomerRejectsInvalidID(t *testing.T) {
 		t.Fatalf("expected ErrCustomerNotFound, got %v", err)
 	}
 }
+
+func TestDeleteCustomerRejectsInvalidID(t *testing.T) {
+	service := &Service{}
+
+	err := service.DeleteCustomer(nil, 1, 1, 0)
+	if !errors.Is(err, ErrCustomerNotFound) {
+		t.Fatalf("expected ErrCustomerNotFound, got %v", err)
+	}
+}

@@ -45,6 +45,14 @@ func (s *Service) UpdateCustomer(ctx context.Context, userID int64, shopID int64
 	return s.repository.UpdateCustomer(ctx, userID, shopID, customerID, fields)
 }
 
+func (s *Service) DeleteCustomer(ctx context.Context, userID int64, shopID int64, customerID int64) error {
+	if customerID < 1 {
+		return ErrCustomerNotFound
+	}
+
+	return s.repository.DeleteCustomer(ctx, userID, shopID, customerID)
+}
+
 func (s *Service) ListCustomers(ctx context.Context, shopID int64, req ListCustomersRequest) (ListCustomersResponse, error) {
 	req = normalizeListCustomersRequest(req)
 	if err := validateListCustomersRequest(req); err != nil {

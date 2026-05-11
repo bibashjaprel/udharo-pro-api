@@ -15,6 +15,7 @@ import (
 type CustomerService interface {
 	CreateCustomer(ctx context.Context, userID int64, shopID int64, req CreateCustomerRequest) (CustomerResponse, error)
 	UpdateCustomer(ctx context.Context, userID int64, shopID int64, customerID int64, req UpdateCustomerRequest) (CustomerResponse, error)
+	DeleteCustomer(ctx context.Context, userID int64, shopID int64, customerID int64) error
 	ListCustomers(ctx context.Context, shopID int64, req ListCustomersRequest) (ListCustomersResponse, error)
 	GetCustomer(ctx context.Context, shopID int64, customerID int64) (CustomerDetailsResponse, error)
 }
@@ -45,8 +46,10 @@ func (h *Handler) CustomerDetails(w http.ResponseWriter, r *http.Request) {
 		h.GetCustomer(w, r)
 	case http.MethodPatch:
 		h.UpdateCustomer(w, r)
+	case http.MethodDelete:
+		h.DeleteCustomer(w, r)
 	default:
-		w.Header().Set("Allow", "GET, PATCH")
+		w.Header().Set("Allow", "GET, PATCH, DELETE")
 		response.Error(w, http.StatusMethodNotAllowed, "method not allowed", "method not allowed")
 	}
 }
@@ -121,6 +124,38 @@ func (h *Handler) UpdateCustomer(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.Success(w, http.StatusOK, "customer updated successfully", res)
+}
+
+func (h *Handler) DeleteCustomer(w http.ResponseWriter, r *http.Request) {
+	userID, ok := contextx.GetUserIDInt64(r.Context())
+	if !ok {
+		response.Error(w, http.StatusUnauthorized, "unauthorized", "unauthorized")
+		return
+	}
+
+	shopID, ok := contextx.GetShopIDInt64(r.Context())
+	if !ok {
+		response.Error(w, http.StatusUnauthorized, "unauthorized", "unauthorized")
+		return
+	}
+
+	customerID, err := customerIDFromPath(r.URL.Path)
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "invalid request", "invalid customer id")
+		return
+	}
+
+	if err := h.service.DeleteCustomer(r.Context(), userID, shopID, customerID); err != nil {
+		switch {
+		case errors.Is(err, ErrCustomerNotFound):
+			response.Error(w, http.StatusNotFound, "customer not found", "customer not found")
+		default:
+			response.Error(w, http.StatusInternalServerError, "customer delete failed", "customer delete failed")
+		}
+		return
+	}
+
+	response.Success(w, http.StatusOK, "customer deleted successfully", nil)
 }
 
 func (h *Handler) ListCustomers(w http.ResponseWriter, r *http.Request) {
