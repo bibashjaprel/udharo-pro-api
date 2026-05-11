@@ -11,16 +11,36 @@ import (
 )
 
 type fakeSignupService struct {
-	response SignupResponse
-	err      error
-	request  SignupRequest
-	called   bool
+	response                   SignupResponse
+	resendResponse             ResendEmailVerificationResponse
+	verifyResponse             VerifyEmailResponse
+	err                        error
+	resendErr                  error
+	verifyErr                  error
+	request                    SignupRequest
+	resendRequest              ResendEmailVerificationRequest
+	verifyRequest              VerifyEmailRequest
+	called                     bool
+	resendEmailVerificationHit bool
+	verifyEmailHit             bool
 }
 
 func (s *fakeSignupService) Signup(_ context.Context, req SignupRequest) (SignupResponse, error) {
 	s.called = true
 	s.request = req
 	return s.response, s.err
+}
+
+func (s *fakeSignupService) ResendEmailVerification(_ context.Context, req ResendEmailVerificationRequest) (ResendEmailVerificationResponse, error) {
+	s.resendEmailVerificationHit = true
+	s.resendRequest = req
+	return s.resendResponse, s.resendErr
+}
+
+func (s *fakeSignupService) VerifyEmail(_ context.Context, req VerifyEmailRequest) (VerifyEmailResponse, error) {
+	s.verifyEmailHit = true
+	s.verifyRequest = req
+	return s.verifyResponse, s.verifyErr
 }
 
 func (s *fakeSignupService) Login(_ context.Context, _ LoginRequest) (LoginResponse, error) {
@@ -101,6 +121,73 @@ func TestSignupHandlerRejectsDuplicateEmail(t *testing.T) {
 
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("expected status %d, got %d", http.StatusConflict, rec.Code)
+	}
+}
+
+func TestSignupHandlerRejectsUnverifiedEmail(t *testing.T) {
+	service := &fakeSignupService{err: ErrEmailVerificationRequired}
+	handler := NewHandler(service)
+
+	body := []byte(`{
+		"name": "Bibas",
+		"email": "bibas@example.com",
+		"phone": "9841000000",
+		"password": "StrongPassword123",
+		"shop_name": "Bibas Kirana Pasal"
+	}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/signup", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+
+	handler.Signup(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected status %d, got %d", http.StatusForbidden, rec.Code)
+	}
+}
+
+func TestResendEmailVerificationHandler(t *testing.T) {
+	service := &fakeSignupService{
+		resendResponse: ResendEmailVerificationResponse{
+			Email: "bibas@example.com",
+		},
+	}
+	handler := NewHandler(service)
+
+	body := []byte(`{"email":"bibas@example.com"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/email-verification/resend", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+
+	handler.ResendEmailVerification(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+	if !service.resendEmailVerificationHit {
+		t.Fatal("expected resend service to be called")
+	}
+	if service.resendRequest.Email != "bibas@example.com" {
+		t.Fatalf("expected request email to be passed to service, got %q", service.resendRequest.Email)
+	}
+}
+
+func TestVerifyEmailHandler(t *testing.T) {
+	service := &fakeSignupService{}
+	handler := NewHandler(service)
+
+	body := []byte(`{"email":"bibas@example.com","code":"123456"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/email-verification/verify", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+
+	handler.VerifyEmail(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+	if !service.verifyEmailHit {
+		t.Fatal("expected verify service to be called")
+	}
+	if service.verifyRequest.Email != "bibas@example.com" || service.verifyRequest.Code != "123456" {
+		t.Fatalf("unexpected verify request: %+v", service.verifyRequest)
 	}
 }
 

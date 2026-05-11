@@ -10,6 +10,25 @@ type SignupRequest struct {
 	ShopName string `json:"shop_name"`
 }
 
+type ResendEmailVerificationRequest struct {
+	Email string `json:"email"`
+}
+
+type ResendEmailVerificationResponse struct {
+	Email     string    `json:"email"`
+	ExpiresAt time.Time `json:"expires_at"`
+}
+
+type VerifyEmailRequest struct {
+	Email string `json:"email"`
+	Code  string `json:"code"`
+}
+
+type VerifyEmailResponse struct {
+	Email      string    `json:"email"`
+	VerifiedAt time.Time `json:"verified_at"`
+}
+
 type SignupResponse struct {
 	UserID         int64  `json:"user_id"`
 	ShopID         int64  `json:"shop_id"`

@@ -29,7 +29,7 @@ func New(cfg config.Config, db *pgxpool.Pool) *Server {
 }
 
 func (s *Server) Handler() http.Handler {
-	return s.mux
+	return middleware.CORS(s.config.CORSOrigins)(s.mux)
 }
 
 func (s *Server) Addr() string {
@@ -44,7 +44,15 @@ func (s *Server) HTTPServer() *http.Server {
 }
 
 func (s *Server) authModule() (*auth.Handler, middleware.Middleware) {
-	authService := auth.NewService(s.db, s.config.JWTSecret)
+	emailSender := auth.EmailSender(auth.LogEmailSender{})
+	if s.config.ResendAPIKey != "" && s.config.EmailFrom != "" {
+		emailSender = auth.ResendEmailSender{
+			APIKey: s.config.ResendAPIKey,
+			From:   s.config.EmailFrom,
+		}
+	}
+
+	authService := auth.NewServiceWithEmailSender(s.db, s.config.JWTSecret, emailSender)
 	authHandler := auth.NewHandler(authService)
 	authMiddleware := middleware.Auth(s.config.JWTSecret, authService)
 

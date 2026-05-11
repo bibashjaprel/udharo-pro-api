@@ -81,6 +81,106 @@ func (r *Repository) CreateSignup(ctx context.Context, req SignupRequest, passwo
 	}, nil
 }
 
+func (r *Repository) UserEmailExists(ctx context.Context, email string) (bool, error) {
+	var exists bool
+	err := r.db.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1
+			FROM users
+			WHERE email = $1
+		)
+	`, email).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("check user email exists: %w", err)
+	}
+
+	return exists, nil
+}
+
+func (r *Repository) IsEmailVerified(ctx context.Context, email string) (bool, error) {
+	var verified bool
+	err := r.db.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1
+			FROM signup_email_verifications
+			WHERE email = $1
+				AND verified_at IS NOT NULL
+		)
+	`, email).Scan(&verified)
+	if err != nil {
+		return false, fmt.Errorf("check email verification: %w", err)
+	}
+
+	return verified, nil
+}
+
+func (r *Repository) SaveEmailVerification(ctx context.Context, email string, codeHash string, expiresAt time.Time) error {
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO signup_email_verifications (email, code_hash, expires_at, sent_at)
+		VALUES ($1, $2, $3, NOW())
+		ON CONFLICT (email) DO UPDATE
+		SET code_hash = EXCLUDED.code_hash,
+			expires_at = EXCLUDED.expires_at,
+			verified_at = NULL,
+			sent_at = NOW(),
+			attempts = 0,
+			updated_at = NOW()
+	`, email, codeHash, expiresAt)
+	if err != nil {
+		return fmt.Errorf("save email verification: %w", err)
+	}
+
+	return nil
+}
+
+func (r *Repository) FindEmailVerification(ctx context.Context, email string) (emailVerification, error) {
+	var verification emailVerification
+	err := r.db.QueryRow(ctx, `
+		SELECT code_hash, expires_at
+		FROM signup_email_verifications
+		WHERE email = $1
+	`, email).Scan(&verification.CodeHash, &verification.ExpiresAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return emailVerification{}, ErrEmailVerificationNotFound
+	}
+	if err != nil {
+		return emailVerification{}, fmt.Errorf("find email verification: %w", err)
+	}
+
+	return verification, nil
+}
+
+func (r *Repository) MarkEmailVerified(ctx context.Context, email string) (time.Time, error) {
+	var verifiedAt time.Time
+	err := r.db.QueryRow(ctx, `
+		UPDATE signup_email_verifications
+		SET verified_at = NOW(),
+			updated_at = NOW()
+		WHERE email = $1
+		RETURNING verified_at
+	`, email).Scan(&verifiedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return time.Time{}, ErrEmailVerificationNotFound
+	}
+	if err != nil {
+		return time.Time{}, fmt.Errorf("mark email verified: %w", err)
+	}
+
+	return verifiedAt, nil
+}
+
+func (r *Repository) RequireVerifiedEmail(ctx context.Context, email string) error {
+	verified, err := r.IsEmailVerified(ctx, email)
+	if err != nil {
+		return err
+	}
+	if !verified {
+		return ErrEmailVerificationRequired
+	}
+
+	return nil
+}
+
 func (r *Repository) FindLoginSession(ctx context.Context, identifier string) (loginSession, string, error) {
 	var session loginSession
 	var passwordHash string

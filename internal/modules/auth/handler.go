@@ -12,6 +12,8 @@ import (
 
 type SignupService interface {
 	Signup(ctx context.Context, req SignupRequest) (SignupResponse, error)
+	ResendEmailVerification(ctx context.Context, req ResendEmailVerificationRequest) (ResendEmailVerificationResponse, error)
+	VerifyEmail(ctx context.Context, req VerifyEmailRequest) (VerifyEmailResponse, error)
 	Login(ctx context.Context, req LoginRequest) (LoginResponse, error)
 	Logout(ctx context.Context, tokenID string, userID int64, shopID int64) error
 	Me(ctx context.Context, userID int64, shopID int64) (CurrentUserResponse, error)
@@ -43,6 +45,8 @@ func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case errors.Is(err, ErrInvalidInput):
 			response.Error(w, http.StatusBadRequest, "invalid request", "name, email, phone, password, and shop_name are required")
+		case errors.Is(err, ErrEmailVerificationRequired):
+			response.Error(w, http.StatusForbidden, "signup failed", "email verification required")
 		case errors.Is(err, ErrDuplicateEmail):
 			response.Error(w, http.StatusConflict, "signup failed", "email already exists")
 		case errors.Is(err, ErrDuplicatePhone):
@@ -56,6 +60,68 @@ func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.Success(w, http.StatusCreated, "signup successful", res)
+}
+
+func (h *Handler) ResendEmailVerification(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", http.MethodPost)
+		response.Error(w, http.StatusMethodNotAllowed, "method not allowed", "method not allowed")
+		return
+	}
+
+	var req ResendEmailVerificationRequest
+	if err := decodeJSON(r, &req); err != nil {
+		response.Error(w, http.StatusBadRequest, "invalid request", "invalid json body")
+		return
+	}
+
+	res, err := h.service.ResendEmailVerification(r.Context(), req)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrInvalidInput):
+			response.Error(w, http.StatusBadRequest, "invalid request", "email is required")
+		case errors.Is(err, ErrDuplicateEmail):
+			response.Error(w, http.StatusConflict, "verification failed", "email already exists")
+		case errors.Is(err, ErrEmailAlreadyVerified):
+			response.Error(w, http.StatusConflict, "verification failed", "email already verified")
+		default:
+			response.Error(w, http.StatusInternalServerError, "verification failed", "verification email failed")
+		}
+		return
+	}
+
+	response.Success(w, http.StatusOK, "verification email sent", res)
+}
+
+func (h *Handler) VerifyEmail(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", http.MethodPost)
+		response.Error(w, http.StatusMethodNotAllowed, "method not allowed", "method not allowed")
+		return
+	}
+
+	var req VerifyEmailRequest
+	if err := decodeJSON(r, &req); err != nil {
+		response.Error(w, http.StatusBadRequest, "invalid request", "invalid json body")
+		return
+	}
+
+	res, err := h.service.VerifyEmail(r.Context(), req)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrInvalidInput):
+			response.Error(w, http.StatusBadRequest, "invalid request", "email and code are required")
+		case errors.Is(err, ErrEmailVerificationNotFound), errors.Is(err, ErrInvalidVerificationCode):
+			response.Error(w, http.StatusUnauthorized, "verification failed", "invalid verification code")
+		case errors.Is(err, ErrEmailVerificationExpired):
+			response.Error(w, http.StatusGone, "verification failed", "verification code expired")
+		default:
+			response.Error(w, http.StatusInternalServerError, "verification failed", "email verification failed")
+		}
+		return
+	}
+
+	response.Success(w, http.StatusOK, "email verified", res)
 }
 
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {

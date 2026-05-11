@@ -5,14 +5,18 @@ import (
 )
 
 const (
-	SignupPath = "/api/v1/auth/signup"
-	LoginPath  = "/api/v1/auth/login"
-	LogoutPath = "/api/v1/auth/logout"
-	MePath     = "/api/v1/auth/me"
+	SignupPath                  = "/api/v1/auth/signup"
+	ResendEmailVerificationPath = "/api/v1/auth/email-verification/resend"
+	VerifyEmailVerificationPath = "/api/v1/auth/email-verification/verify"
+	LoginPath                   = "/api/v1/auth/login"
+	LogoutPath                  = "/api/v1/auth/logout"
+	MePath                      = "/api/v1/auth/me"
 )
 
 func RegisterPublicRoutes(mux *http.ServeMux, handler *Handler) {
 	mux.HandleFunc(SignupPath, handler.Signup)
+	mux.HandleFunc(ResendEmailVerificationPath, handler.ResendEmailVerification)
+	mux.HandleFunc(VerifyEmailVerificationPath, handler.VerifyEmail)
 	mux.HandleFunc(LoginPath, handler.Login)
 }
 

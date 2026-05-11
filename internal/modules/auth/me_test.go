@@ -24,6 +24,14 @@ func (s *fakeMeService) Signup(_ context.Context, _ SignupRequest) (SignupRespon
 	return SignupResponse{}, nil
 }
 
+func (s *fakeMeService) ResendEmailVerification(_ context.Context, _ ResendEmailVerificationRequest) (ResendEmailVerificationResponse, error) {
+	return ResendEmailVerificationResponse{}, nil
+}
+
+func (s *fakeMeService) VerifyEmail(_ context.Context, _ VerifyEmailRequest) (VerifyEmailResponse, error) {
+	return VerifyEmailResponse{}, nil
+}
+
 func (s *fakeMeService) Login(_ context.Context, _ LoginRequest) (LoginResponse, error) {
 	return LoginResponse{}, nil
 }
