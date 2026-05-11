@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/bibashjaprel/udharo-pro-api/internal/shared/contextx"
 	"github.com/bibashjaprel/udharo-pro-api/internal/shared/response"
@@ -14,6 +15,7 @@ import (
 type CustomerService interface {
 	CreateCustomer(ctx context.Context, userID int64, shopID int64, req CreateCustomerRequest) (CustomerResponse, error)
 	ListCustomers(ctx context.Context, shopID int64, req ListCustomersRequest) (ListCustomersResponse, error)
+	GetCustomer(ctx context.Context, shopID int64, customerID int64) (CustomerDetailsResponse, error)
 }
 
 type Handler struct {
@@ -34,6 +36,39 @@ func (h *Handler) Customers(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Allow", "GET, POST")
 		response.Error(w, http.StatusMethodNotAllowed, "method not allowed", "method not allowed")
 	}
+}
+
+func (h *Handler) CustomerDetails(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", http.MethodGet)
+		response.Error(w, http.StatusMethodNotAllowed, "method not allowed", "method not allowed")
+		return
+	}
+
+	shopID, ok := contextx.GetShopIDInt64(r.Context())
+	if !ok {
+		response.Error(w, http.StatusUnauthorized, "unauthorized", "unauthorized")
+		return
+	}
+
+	customerID, err := customerIDFromPath(r.URL.Path)
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "invalid request", "invalid customer id")
+		return
+	}
+
+	res, err := h.service.GetCustomer(r.Context(), shopID, customerID)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrCustomerNotFound):
+			response.Error(w, http.StatusNotFound, "customer not found", "customer not found")
+		default:
+			response.Error(w, http.StatusInternalServerError, "customer fetch failed", "customer fetch failed")
+		}
+		return
+	}
+
+	response.Success(w, http.StatusOK, "customer fetched successfully", res)
 }
 
 func (h *Handler) ListCustomers(w http.ResponseWriter, r *http.Request) {
@@ -142,4 +177,13 @@ func queryInt(r *http.Request, key string, defaultValue int) (int, error) {
 	}
 
 	return parsed, nil
+}
+
+func customerIDFromPath(path string) (int64, error) {
+	id := strings.TrimPrefix(path, CustomersPath+"/")
+	if id == "" || strings.Contains(id, "/") {
+		return 0, strconv.ErrSyntax
+	}
+
+	return strconv.ParseInt(id, 10, 64)
 }
