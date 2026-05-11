@@ -83,8 +83,73 @@ func (r *Repository) CreateCreditEntry(ctx context.Context, userID int64, shopID
 	return res, nil
 }
 
+func (r *Repository) ListCustomerLedger(ctx context.Context, shopID int64, customerID int64, req ListLedgerEntriesRequest) (CustomerLedgerStatementResponse, error) {
+	if err := ensureCustomerBelongsToShop(ctx, r.db, shopID, customerID); err != nil {
+		return CustomerLedgerStatementResponse{}, err
+	}
+
+	var total int64
+	if err := r.db.QueryRow(ctx, `
+		SELECT COUNT(*)
+		FROM ledger_entries
+		WHERE shop_id = $1
+			AND customer_id = $2
+			AND deleted_at IS NULL
+			AND ($3 OR status <> 'cancelled')
+	`, shopID, customerID, req.IncludeCancelled).Scan(&total); err != nil {
+		return CustomerLedgerStatementResponse{}, fmt.Errorf("count customer ledger entries: %w", err)
+	}
+
+	offset := (req.Page - 1) * req.Limit
+	rows, err := r.db.Query(ctx, `
+		SELECT id, shop_id, customer_id, entry_type, amount, note, transaction_date, status, created_by, created_at, updated_at
+		FROM ledger_entries
+		WHERE shop_id = $1
+			AND customer_id = $2
+			AND deleted_at IS NULL
+			AND ($3 OR status <> 'cancelled')
+		ORDER BY transaction_date DESC, id DESC
+		LIMIT $4 OFFSET $5
+	`, shopID, customerID, req.IncludeCancelled, req.Limit, offset)
+	if err != nil {
+		return CustomerLedgerStatementResponse{}, fmt.Errorf("list customer ledger entries: %w", err)
+	}
+	defer rows.Close()
+
+	entries := make([]LedgerEntryResponse, 0)
+	for rows.Next() {
+		entry, err := scanLedgerEntry(rows)
+		if err != nil {
+			return CustomerLedgerStatementResponse{}, err
+		}
+		entries = append(entries, entry)
+	}
+	if err := rows.Err(); err != nil {
+		return CustomerLedgerStatementResponse{}, fmt.Errorf("iterate customer ledger entries: %w", err)
+	}
+
+	balance, err := calculateCustomerBalance(ctx, r.db, shopID, customerID)
+	if err != nil {
+		return CustomerLedgerStatementResponse{}, err
+	}
+
+	return CustomerLedgerStatementResponse{
+		CustomerID:     customerID,
+		ShopID:         shopID,
+		Entries:        entries,
+		Page:           req.Page,
+		Limit:          req.Limit,
+		Total:          total,
+		CurrentBalance: balance,
+	}, nil
+}
+
 type customerChecker interface {
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
+type ledgerEntryScanner interface {
+	Scan(dest ...any) error
 }
 
 func ensureCustomerBelongsToShop(ctx context.Context, q customerChecker, shopID int64, customerID int64) error {
@@ -104,6 +169,54 @@ func ensureCustomerBelongsToShop(ctx context.Context, q customerChecker, shopID 
 	}
 
 	return nil
+}
+
+func calculateCustomerBalance(ctx context.Context, q customerChecker, shopID int64, customerID int64) (float64, error) {
+	var balance float64
+	err := q.QueryRow(ctx, `
+		SELECT COALESCE(SUM(
+			CASE entry_type
+				WHEN 'credit' THEN amount
+				WHEN 'payment' THEN -amount
+				WHEN 'adjustment' THEN amount
+				ELSE 0
+			END
+		), 0)
+		FROM ledger_entries
+		WHERE shop_id = $1
+			AND customer_id = $2
+			AND status = 'active'
+			AND deleted_at IS NULL
+	`, shopID, customerID).Scan(&balance)
+	if err != nil {
+		return 0, fmt.Errorf("calculate customer balance: %w", err)
+	}
+
+	return balance, nil
+}
+
+func scanLedgerEntry(row ledgerEntryScanner) (LedgerEntryResponse, error) {
+	var entry LedgerEntryResponse
+	var note sql.NullString
+
+	if err := row.Scan(
+		&entry.ID,
+		&entry.ShopID,
+		&entry.CustomerID,
+		&entry.EntryType,
+		&entry.Amount,
+		&note,
+		&entry.TransactionDate,
+		&entry.Status,
+		&entry.CreatedBy,
+		&entry.CreatedAt,
+		&entry.UpdatedAt,
+	); err != nil {
+		return LedgerEntryResponse{}, fmt.Errorf("scan ledger entry: %w", err)
+	}
+
+	entry.Note = nullableString(note)
+	return entry, nil
 }
 
 func nullableString(value sql.NullString) *string {

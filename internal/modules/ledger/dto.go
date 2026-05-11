@@ -8,6 +8,22 @@ type CreateCreditEntryRequest struct {
 	TransactionDate string  `json:"transaction_date"`
 }
 
+type ListLedgerEntriesRequest struct {
+	Page             int
+	Limit            int
+	IncludeCancelled bool
+}
+
+type CustomerLedgerStatementResponse struct {
+	CustomerID     int64                 `json:"customer_id"`
+	ShopID         int64                 `json:"shop_id"`
+	Entries        []LedgerEntryResponse `json:"entries"`
+	Page           int                   `json:"page"`
+	Limit          int                   `json:"limit"`
+	Total          int64                 `json:"total"`
+	CurrentBalance float64               `json:"current_balance"`
+}
+
 type LedgerEntryResponse struct {
 	ID              int64     `json:"id"`
 	ShopID          int64     `json:"shop_id"`
