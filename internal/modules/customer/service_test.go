@@ -33,3 +33,25 @@ func TestValidateCreateCustomerRequestRequiresNameAndPhone(t *testing.T) {
 		t.Fatalf("expected ErrInvalidCustomer, got %v", err)
 	}
 }
+
+func TestNormalizeListCustomersRequestDefaultsPagination(t *testing.T) {
+	req := normalizeListCustomersRequest(ListCustomersRequest{})
+
+	if req.Page != 1 || req.Limit != 20 {
+		t.Fatalf("expected default pagination, got %+v", req)
+	}
+}
+
+func TestValidateListCustomersRequestRejectsInvalidPagination(t *testing.T) {
+	tests := []ListCustomersRequest{
+		{Page: 0, Limit: 20},
+		{Page: 1, Limit: 0},
+		{Page: 1, Limit: 101},
+	}
+
+	for _, tt := range tests {
+		if err := validateListCustomersRequest(tt); !errors.Is(err, ErrInvalidPagination) {
+			t.Fatalf("expected ErrInvalidPagination for %+v, got %v", tt, err)
+		}
+	}
+}

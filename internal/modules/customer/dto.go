@@ -9,6 +9,18 @@ type CreateCustomerRequest struct {
 	Notes   *string `json:"notes"`
 }
 
+type ListCustomersRequest struct {
+	Page  int `json:"page"`
+	Limit int `json:"limit"`
+}
+
+type ListCustomersResponse struct {
+	Customers []CustomerResponse `json:"customers"`
+	Page      int                `json:"page"`
+	Limit     int                `json:"limit"`
+	Total     int64              `json:"total"`
+}
+
 type CustomerResponse struct {
 	ID        int64     `json:"id"`
 	ShopID    int64     `json:"shop_id"`

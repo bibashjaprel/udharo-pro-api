@@ -76,6 +76,66 @@ func (r *Repository) CreateCustomer(ctx context.Context, userID int64, shopID in
 	return res, nil
 }
 
+func (r *Repository) ListCustomers(ctx context.Context, shopID int64, req ListCustomersRequest) (ListCustomersResponse, error) {
+	var total int64
+	if err := r.db.QueryRow(ctx, `
+		SELECT COUNT(*)
+		FROM customers
+		WHERE shop_id = $1
+			AND deleted_at IS NULL
+	`, shopID).Scan(&total); err != nil {
+		return ListCustomersResponse{}, fmt.Errorf("count customers: %w", err)
+	}
+
+	offset := (req.Page - 1) * req.Limit
+	rows, err := r.db.Query(ctx, `
+		SELECT id, shop_id, name, phone, address, notes, created_at, updated_at
+		FROM customers
+		WHERE shop_id = $1
+			AND deleted_at IS NULL
+		ORDER BY created_at DESC, id DESC
+		LIMIT $2 OFFSET $3
+	`, shopID, req.Limit, offset)
+	if err != nil {
+		return ListCustomersResponse{}, fmt.Errorf("list customers: %w", err)
+	}
+	defer rows.Close()
+
+	customers := make([]CustomerResponse, 0)
+	for rows.Next() {
+		var customer CustomerResponse
+		var address sql.NullString
+		var notes sql.NullString
+
+		if err := rows.Scan(
+			&customer.ID,
+			&customer.ShopID,
+			&customer.Name,
+			&customer.Phone,
+			&address,
+			&notes,
+			&customer.CreatedAt,
+			&customer.UpdatedAt,
+		); err != nil {
+			return ListCustomersResponse{}, fmt.Errorf("scan customer: %w", err)
+		}
+
+		customer.Address = nullableString(address)
+		customer.Notes = nullableString(notes)
+		customers = append(customers, customer)
+	}
+	if err := rows.Err(); err != nil {
+		return ListCustomersResponse{}, fmt.Errorf("iterate customers: %w", err)
+	}
+
+	return ListCustomersResponse{
+		Customers: customers,
+		Page:      req.Page,
+		Limit:     req.Limit,
+		Total:     total,
+	}, nil
+}
+
 func mapCreateCustomerDBError(err error) error {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "idx_customers_shop_id_phone_unique" {
