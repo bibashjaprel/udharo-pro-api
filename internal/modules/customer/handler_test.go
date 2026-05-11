@@ -63,7 +63,7 @@ func TestListCustomersHandlerListsCustomers(t *testing.T) {
 	handler := NewHandler(service)
 
 	ctx := contextx.WithShopID(context.Background(), "2")
-	req := httptest.NewRequest(http.MethodGet, CustomersPath+"?page=2&limit=5", nil).WithContext(ctx)
+	req := httptest.NewRequest(http.MethodGet, CustomersPath+"?page=2&limit=5&search=ram", nil).WithContext(ctx)
 	rec := httptest.NewRecorder()
 
 	handler.Customers(rec, req)
@@ -77,7 +77,7 @@ func TestListCustomersHandlerListsCustomers(t *testing.T) {
 	if service.shopID != 2 {
 		t.Fatalf("unexpected shop id: %d", service.shopID)
 	}
-	if service.listRequest.Page != 2 || service.listRequest.Limit != 5 {
+	if service.listRequest.Page != 2 || service.listRequest.Limit != 5 || service.listRequest.Search != "ram" {
 		t.Fatalf("unexpected list request: %+v", service.listRequest)
 	}
 

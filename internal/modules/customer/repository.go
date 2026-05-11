@@ -83,7 +83,13 @@ func (r *Repository) ListCustomers(ctx context.Context, shopID int64, req ListCu
 		FROM customers
 		WHERE shop_id = $1
 			AND deleted_at IS NULL
-	`, shopID).Scan(&total); err != nil {
+			AND (
+				$2 = ''
+				OR name ILIKE '%' || $2 || '%'
+				OR phone ILIKE '%' || $2 || '%'
+				OR address ILIKE '%' || $2 || '%'
+			)
+	`, shopID, req.Search).Scan(&total); err != nil {
 		return ListCustomersResponse{}, fmt.Errorf("count customers: %w", err)
 	}
 
@@ -93,9 +99,15 @@ func (r *Repository) ListCustomers(ctx context.Context, shopID int64, req ListCu
 		FROM customers
 		WHERE shop_id = $1
 			AND deleted_at IS NULL
+			AND (
+				$2 = ''
+				OR name ILIKE '%' || $2 || '%'
+				OR phone ILIKE '%' || $2 || '%'
+				OR address ILIKE '%' || $2 || '%'
+			)
 		ORDER BY created_at DESC, id DESC
-		LIMIT $2 OFFSET $3
-	`, shopID, req.Limit, offset)
+		LIMIT $3 OFFSET $4
+	`, shopID, req.Search, req.Limit, offset)
 	if err != nil {
 		return ListCustomersResponse{}, fmt.Errorf("list customers: %w", err)
 	}

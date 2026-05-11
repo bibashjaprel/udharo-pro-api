@@ -123,7 +123,11 @@ func listCustomersRequestFromQuery(r *http.Request) (ListCustomersRequest, error
 		return ListCustomersRequest{}, err
 	}
 
-	return ListCustomersRequest{Page: page, Limit: limit}, nil
+	return ListCustomersRequest{
+		Page:   page,
+		Limit:  limit,
+		Search: r.URL.Query().Get("search"),
+	}, nil
 }
 
 func queryInt(r *http.Request, key string, defaultValue int) (int, error) {
