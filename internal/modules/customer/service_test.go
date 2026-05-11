@@ -35,10 +35,13 @@ func TestValidateCreateCustomerRequestRequiresNameAndPhone(t *testing.T) {
 }
 
 func TestNormalizeListCustomersRequestDefaultsPagination(t *testing.T) {
-	req := normalizeListCustomersRequest(ListCustomersRequest{})
+	req := normalizeListCustomersRequest(ListCustomersRequest{Search: " ram "})
 
 	if req.Page != 1 || req.Limit != 20 {
 		t.Fatalf("expected default pagination, got %+v", req)
+	}
+	if req.Search != "ram" {
+		t.Fatalf("expected trimmed search, got %q", req.Search)
 	}
 }
 

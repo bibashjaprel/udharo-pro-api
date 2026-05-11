@@ -10,8 +10,9 @@ type CreateCustomerRequest struct {
 }
 
 type ListCustomersRequest struct {
-	Page  int `json:"page"`
-	Limit int `json:"limit"`
+	Page   int    `json:"page"`
+	Limit  int    `json:"limit"`
+	Search string `json:"search"`
 }
 
 type ListCustomersResponse struct {

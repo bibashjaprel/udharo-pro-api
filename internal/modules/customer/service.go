@@ -63,6 +63,7 @@ func normalizeListCustomersRequest(req ListCustomersRequest) ListCustomersReques
 	if req.Limit == 0 {
 		req.Limit = 20
 	}
+	req.Search = strings.TrimSpace(req.Search)
 	return req
 }
 
