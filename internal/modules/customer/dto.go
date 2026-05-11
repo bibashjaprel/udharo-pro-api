@@ -9,6 +9,13 @@ type CreateCustomerRequest struct {
 	Notes   *string `json:"notes"`
 }
 
+type UpdateCustomerRequest struct {
+	Name    *string `json:"name"`
+	Phone   *string `json:"phone"`
+	Address *string `json:"address"`
+	Notes   *string `json:"notes"`
+}
+
 type ListCustomersRequest struct {
 	Page   int    `json:"page"`
 	Limit  int    `json:"limit"`

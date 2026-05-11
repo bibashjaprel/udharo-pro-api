@@ -15,17 +15,21 @@ import (
 
 type fakeCustomerService struct {
 	response       CustomerResponse
+	updateResponse CustomerResponse
 	listResponse   ListCustomersResponse
 	detailResponse CustomerDetailsResponse
 	err            error
+	updateErr      error
 	listErr        error
 	detailErr      error
 	userID         int64
 	shopID         int64
 	customerID     int64
 	request        CreateCustomerRequest
+	updateRequest  UpdateCustomerRequest
 	listRequest    ListCustomersRequest
 	called         bool
+	updateCalled   bool
 	listCalled     bool
 	getCalled      bool
 }
@@ -36,6 +40,15 @@ func (s *fakeCustomerService) CreateCustomer(_ context.Context, userID int64, sh
 	s.shopID = shopID
 	s.request = req
 	return s.response, s.err
+}
+
+func (s *fakeCustomerService) UpdateCustomer(_ context.Context, userID int64, shopID int64, customerID int64, req UpdateCustomerRequest) (CustomerResponse, error) {
+	s.updateCalled = true
+	s.userID = userID
+	s.shopID = shopID
+	s.customerID = customerID
+	s.updateRequest = req
+	return s.updateResponse, s.updateErr
 }
 
 func (s *fakeCustomerService) ListCustomers(_ context.Context, shopID int64, req ListCustomersRequest) (ListCustomersResponse, error) {
@@ -50,6 +63,151 @@ func (s *fakeCustomerService) GetCustomer(_ context.Context, shopID int64, custo
 	s.shopID = shopID
 	s.customerID = customerID
 	return s.detailResponse, s.detailErr
+}
+
+func TestUpdateCustomerHandlerUpdatesCustomer(t *testing.T) {
+	address := "Lalitpur"
+	now := time.Now().UTC()
+	service := &fakeCustomerService{
+		updateResponse: CustomerResponse{
+			ID:        5,
+			ShopID:    2,
+			Name:      "Ram Bahadur",
+			Phone:     "9841000001",
+			Address:   &address,
+			CreatedAt: now,
+			UpdatedAt: now,
+		},
+	}
+	handler := NewHandler(service)
+
+	ctx := contextx.WithUserID(context.Background(), "1")
+	ctx = contextx.WithShopID(ctx, "2")
+
+	body := []byte(`{"phone":"9841000001","address":"Lalitpur"}`)
+	req := httptest.NewRequest(http.MethodPatch, CustomersPath+"/5", bytes.NewReader(body)).WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	handler.CustomerDetails(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+	if !service.updateCalled {
+		t.Fatal("expected customer update service to be called")
+	}
+	if service.userID != 1 || service.shopID != 2 || service.customerID != 5 {
+		t.Fatalf("unexpected update args: user=%d shop=%d customer=%d", service.userID, service.shopID, service.customerID)
+	}
+	if service.updateRequest.Phone == nil || *service.updateRequest.Phone != "9841000001" {
+		t.Fatalf("unexpected update request: %+v", service.updateRequest)
+	}
+
+	var response struct {
+		Success bool             `json:"success"`
+		Data    CustomerResponse `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !response.Success || response.Data.ID != 5 || response.Data.Phone != "9841000001" {
+		t.Fatalf("unexpected response: %+v", response)
+	}
+}
+
+func TestUpdateCustomerHandlerRequiresAuthentication(t *testing.T) {
+	handler := NewHandler(&fakeCustomerService{})
+	req := httptest.NewRequest(http.MethodPatch, CustomersPath+"/5", bytes.NewReader([]byte(`{"name":"Ram"}`)))
+	rec := httptest.NewRecorder()
+
+	handler.UpdateCustomer(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected status %d, got %d", http.StatusUnauthorized, rec.Code)
+	}
+}
+
+func TestUpdateCustomerHandlerRejectsInvalidID(t *testing.T) {
+	handler := NewHandler(&fakeCustomerService{})
+
+	ctx := contextx.WithUserID(context.Background(), "1")
+	ctx = contextx.WithShopID(ctx, "2")
+
+	req := httptest.NewRequest(http.MethodPatch, CustomersPath+"/0", bytes.NewReader([]byte(`{"name":"Ram"}`))).WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	handler.UpdateCustomer(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, rec.Code)
+	}
+}
+
+func TestUpdateCustomerHandlerRejectsUnknownFields(t *testing.T) {
+	handler := NewHandler(&fakeCustomerService{})
+
+	ctx := contextx.WithUserID(context.Background(), "1")
+	ctx = contextx.WithShopID(ctx, "2")
+
+	req := httptest.NewRequest(http.MethodPatch, CustomersPath+"/5", bytes.NewReader([]byte(`{"unknown":"value"}`))).WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	handler.UpdateCustomer(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, rec.Code)
+	}
+}
+
+func TestUpdateCustomerHandlerHandlesInvalidCustomer(t *testing.T) {
+	service := &fakeCustomerService{updateErr: ErrInvalidCustomer}
+	handler := NewHandler(service)
+
+	ctx := contextx.WithUserID(context.Background(), "1")
+	ctx = contextx.WithShopID(ctx, "2")
+
+	req := httptest.NewRequest(http.MethodPatch, CustomersPath+"/5", bytes.NewReader([]byte(`{"name":" "}`))).WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	handler.UpdateCustomer(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, rec.Code)
+	}
+}
+
+func TestUpdateCustomerHandlerReturnsNotFound(t *testing.T) {
+	service := &fakeCustomerService{updateErr: ErrCustomerNotFound}
+	handler := NewHandler(service)
+
+	ctx := contextx.WithUserID(context.Background(), "1")
+	ctx = contextx.WithShopID(ctx, "2")
+
+	req := httptest.NewRequest(http.MethodPatch, CustomersPath+"/5", bytes.NewReader([]byte(`{"name":"Ram"}`))).WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	handler.UpdateCustomer(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected status %d, got %d", http.StatusNotFound, rec.Code)
+	}
+}
+
+func TestUpdateCustomerHandlerHandlesDuplicatePhone(t *testing.T) {
+	service := &fakeCustomerService{updateErr: ErrDuplicateCustomerPhone}
+	handler := NewHandler(service)
+
+	ctx := contextx.WithUserID(context.Background(), "1")
+	ctx = contextx.WithShopID(ctx, "2")
+
+	req := httptest.NewRequest(http.MethodPatch, CustomersPath+"/5", bytes.NewReader([]byte(`{"phone":"9841000001"}`))).WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	handler.UpdateCustomer(rec, req)
+
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("expected status %d, got %d", http.StatusConflict, rec.Code)
+	}
 }
 
 func TestCustomerDetailsHandlerGetsCustomer(t *testing.T) {
@@ -148,8 +306,8 @@ func TestCustomerDetailsHandlerRejectsInvalidMethod(t *testing.T) {
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("expected status %d, got %d", http.StatusMethodNotAllowed, rec.Code)
 	}
-	if rec.Header().Get("Allow") != http.MethodGet {
-		t.Fatalf("expected Allow header %q, got %q", http.MethodGet, rec.Header().Get("Allow"))
+	if rec.Header().Get("Allow") != "GET, PATCH" {
+		t.Fatalf("expected Allow header %q, got %q", "GET, PATCH", rec.Header().Get("Allow"))
 	}
 }
 

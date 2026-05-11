@@ -34,6 +34,51 @@ func TestValidateCreateCustomerRequestRequiresNameAndPhone(t *testing.T) {
 	}
 }
 
+func TestNormalizeUpdateCustomerRequest(t *testing.T) {
+	name := " Ram Bahadur "
+	phone := " 9841000001 "
+	address := " "
+	notes := " Updated notes "
+
+	fields, err := normalizeUpdateCustomerRequest(UpdateCustomerRequest{
+		Name:    &name,
+		Phone:   &phone,
+		Address: &address,
+		Notes:   &notes,
+	})
+	if err != nil {
+		t.Fatalf("normalize update request: %v", err)
+	}
+
+	if !fields.NameSet || fields.Name != "Ram Bahadur" {
+		t.Fatalf("expected trimmed name, got %+v", fields)
+	}
+	if !fields.PhoneSet || fields.Phone != "9841000001" {
+		t.Fatalf("expected trimmed phone, got %+v", fields)
+	}
+	if !fields.AddressSet || fields.Address != nil {
+		t.Fatalf("expected blank address to be nil, got %+v", fields.Address)
+	}
+	if !fields.NotesSet || fields.Notes == nil || *fields.Notes != "Updated notes" {
+		t.Fatalf("expected trimmed notes, got %+v", fields.Notes)
+	}
+}
+
+func TestNormalizeUpdateCustomerRequestRejectsInvalidRequest(t *testing.T) {
+	blank := " "
+	tests := []UpdateCustomerRequest{
+		{},
+		{Name: &blank},
+		{Phone: &blank},
+	}
+
+	for _, tt := range tests {
+		if _, err := normalizeUpdateCustomerRequest(tt); !errors.Is(err, ErrInvalidCustomer) {
+			t.Fatalf("expected ErrInvalidCustomer for %+v, got %v", tt, err)
+		}
+	}
+}
+
 func TestNormalizeListCustomersRequestDefaultsPagination(t *testing.T) {
 	req := normalizeListCustomersRequest(ListCustomersRequest{Search: " ram "})
 
@@ -63,6 +108,15 @@ func TestGetCustomerRejectsInvalidID(t *testing.T) {
 	service := &Service{}
 
 	_, err := service.GetCustomer(nil, 1, 0)
+	if !errors.Is(err, ErrCustomerNotFound) {
+		t.Fatalf("expected ErrCustomerNotFound, got %v", err)
+	}
+}
+
+func TestUpdateCustomerRejectsInvalidID(t *testing.T) {
+	service := &Service{}
+
+	_, err := service.UpdateCustomer(nil, 1, 1, 0, UpdateCustomerRequest{})
 	if !errors.Is(err, ErrCustomerNotFound) {
 		t.Fatalf("expected ErrCustomerNotFound, got %v", err)
 	}
