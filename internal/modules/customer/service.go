@@ -70,6 +70,14 @@ func (s *Service) GetCustomer(ctx context.Context, shopID int64, customerID int6
 	return s.repository.GetCustomer(ctx, shopID, customerID)
 }
 
+func (s *Service) GetCustomerBalance(ctx context.Context, shopID int64, customerID int64) (CustomerBalanceResponse, error) {
+	if customerID < 1 {
+		return CustomerBalanceResponse{}, ErrCustomerNotFound
+	}
+
+	return s.repository.GetCustomerBalance(ctx, shopID, customerID)
+}
+
 func normalizeCreateCustomerRequest(req CreateCustomerRequest) CreateCustomerRequest {
 	req.Name = strings.TrimSpace(req.Name)
 	req.Phone = strings.TrimSpace(req.Phone)
