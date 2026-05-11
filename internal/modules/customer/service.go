@@ -11,6 +11,7 @@ import (
 var (
 	ErrInvalidCustomer        = errors.New("invalid customer")
 	ErrDuplicateCustomerPhone = errors.New("customer phone already exists")
+	ErrInvalidPagination      = errors.New("invalid pagination")
 )
 
 type Service struct {
@@ -30,6 +31,15 @@ func (s *Service) CreateCustomer(ctx context.Context, userID int64, shopID int64
 	return s.repository.CreateCustomer(ctx, userID, shopID, req)
 }
 
+func (s *Service) ListCustomers(ctx context.Context, shopID int64, req ListCustomersRequest) (ListCustomersResponse, error) {
+	req = normalizeListCustomersRequest(req)
+	if err := validateListCustomersRequest(req); err != nil {
+		return ListCustomersResponse{}, err
+	}
+
+	return s.repository.ListCustomers(ctx, shopID, req)
+}
+
 func normalizeCreateCustomerRequest(req CreateCustomerRequest) CreateCustomerRequest {
 	req.Name = strings.TrimSpace(req.Name)
 	req.Phone = strings.TrimSpace(req.Phone)
@@ -41,6 +51,24 @@ func normalizeCreateCustomerRequest(req CreateCustomerRequest) CreateCustomerReq
 func validateCreateCustomerRequest(req CreateCustomerRequest) error {
 	if req.Name == "" || req.Phone == "" {
 		return ErrInvalidCustomer
+	}
+
+	return nil
+}
+
+func normalizeListCustomersRequest(req ListCustomersRequest) ListCustomersRequest {
+	if req.Page == 0 {
+		req.Page = 1
+	}
+	if req.Limit == 0 {
+		req.Limit = 20
+	}
+	return req
+}
+
+func validateListCustomersRequest(req ListCustomersRequest) error {
+	if req.Page < 1 || req.Limit < 1 || req.Limit > 100 {
+		return ErrInvalidPagination
 	}
 
 	return nil
